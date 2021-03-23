@@ -3450,6 +3450,21 @@ static void handleMaxGlobalWorkDimAttr(Sema &S, Decl *D, const ParsedAttr &A) {
   S.addIntelSingleArgAttr<SYCLIntelMaxGlobalWorkDimAttr>(D, A, E);
 }
 
+// Handles gpu_cache_config.
+static void handleSYCLIntelGPUCacheConfigAttr(Sema &S, Decl *D, const ParsedAttr &A) {
+  if (D->isInvalidDecl())
+    return;
+
+  if (D->getAttr<SYCLIntelGPUCacheConfigAttr>())
+    S.Diag(A.getLoc(), diag::warn_duplicate_attribute) << A;
+
+  S.CheckDeprecatedSYCLAttributeSpelling(A);
+
+
+  IdentifierLoc *ConfigArg = A.getArgAsIdent(0);
+  D->addAttr(::new (S.Context) SYCLIntelGPUCacheConfigAttr(S.Context, A, ConfigArg->Ident));
+}
+
 // Handles [[intel::loop_fuse]] and [[intel::loop_fuse_independent]].
 void Sema::AddSYCLIntelLoopFuseAttr(Decl *D, const AttributeCommonInfo &CI,
                                     Expr *E) {
@@ -9237,6 +9252,9 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
     break;
   case ParsedAttr::AT_SYCLIntelLoopFuse:
     handleSYCLIntelLoopFuseAttr(S, D, AL);
+    break;
+  case ParsedAttr::AT_SYCLIntelGPUCacheConfig:
+    handleSYCLIntelGPUCacheConfigAttr(S, D, AL);
     break;
   case ParsedAttr::AT_VecTypeHint:
     handleVecTypeHint(S, D, AL);

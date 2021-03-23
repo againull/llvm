@@ -483,12 +483,12 @@ std::pair<RT::PiKernel, std::mutex *> ProgramManager::getOrCreateKernel(
       [&Program](const Locked<KernelCacheT> &LockedCache) -> KernelByNameT & {
     return LockedCache.get()[Program];
   };
-  auto BuildF = [&Program, &KernelName, &Ctx] {
+  auto BuildF = [this, &M, &Program, &KernelName, &Context, &Device] {
     PiKernelT *Result = nullptr;
 
     // TODO need some user-friendly error/exception
     // instead of currently obscure one
-    const detail::plugin &Plugin = Ctx->getPlugin();
+    const detail::plugin &Plugin = getSyclObjImpl(Context)->getPlugin();
     Plugin.call<PiApiKind::piKernelCreate>(Program, KernelName.c_str(),
                                            &Result);
 
@@ -497,6 +497,15 @@ std::pair<RT::PiKernel, std::mutex *> ProgramManager::getOrCreateKernel(
     Plugin.call<PiApiKind::piKernelSetExecInfo>(Result, PI_USM_INDIRECT_ACCESS,
                                                 sizeof(pi_bool), &PI_TRUE);
 
+    const RTDeviceBinaryImage &Img =
+        getDeviceImage(M, KernelName, Context, Device, false);
+    pi_device_binary_property GPUCacheConfigProp = Img.getProperty(KernelName.c_str());
+
+    if (pi::DeviceBinaryProperty(GPUCacheConfigProp).asUint32() == 0) {
+      printf("Need to set large_slm value as cache config\n");
+    } else if (pi::DeviceBinaryProperty(GPUCacheConfigProp).asUint32() == 1) {
+      printf("Need to set large_data value as cache config\n");
+    }
     return Result;
   };
 

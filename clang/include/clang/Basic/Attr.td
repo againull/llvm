@@ -1361,6 +1361,15 @@ def SYCLIntelLoopFuse : InheritableAttr {
   let SupportsNonconformingLambdaSyntax = 1;
 }
 
+def SYCLIntelGPUCacheConfig : InheritableAttr {
+  let Spellings = [CXX11<"intel", "gpu_cache_config">];
+  let Args = [IdentifierArgument<"Config">];
+  let LangOpts = [SYCLIsDevice, SilentlyIgnoreSYCLIsHost];
+  let Subjects = SubjectList<[Function], ErrorDiag>;
+  let Documentation = [Undocumented];
+  let SupportsNonconformingLambdaSyntax = 1;
+}
+
 def C11NoReturn : InheritableAttr {
   let Spellings = [Keyword<"_Noreturn">];
   let Subjects = SubjectList<[Function], ErrorDiag>;

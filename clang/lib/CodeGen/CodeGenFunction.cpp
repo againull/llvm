@@ -730,6 +730,20 @@ void CodeGenFunction::EmitOpenCLKernelMetadata(const FunctionDecl *FD,
         llvm::ConstantAsMetadata::get(Builder.getInt32(1))};
     Fn->setMetadata("stall_enable", llvm::MDNode::get(Context, AttrMDArgs));
   }
+
+  if (const SYCLIntelGPUCacheConfigAttr *A =
+          FD->getAttr<SYCLIntelGPUCacheConfigAttr>()) {
+    IdentifierInfo *Arg = A->getConfig();
+    assert(Arg && "Got an unexpected null argument");
+    StringRef GPUConfigName = Arg->getName().trim();
+    int Val = 0;
+    if (GPUConfigName.equals("large_data"))
+      Val = 1;
+
+    llvm::Metadata *AttrMDArgs[] = {
+        llvm::ConstantAsMetadata::get(Builder.getInt32(Val))};
+    Fn->setMetadata("gpu_cache_config", llvm::MDNode::get(Context, AttrMDArgs));
+  }
 }
 
 /// Determine whether the function F ends with a return stmt.

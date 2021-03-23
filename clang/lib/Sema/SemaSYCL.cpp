@@ -319,7 +319,7 @@ static void collectSYCLAttributes(Sema &S, FunctionDecl *FD,
                SYCLIntelKernelArgsRestrictAttr, SYCLIntelNumSimdWorkItemsAttr,
                SYCLIntelSchedulerTargetFmaxMhzAttr,
                SYCLIntelMaxWorkGroupSizeAttr, SYCLIntelMaxGlobalWorkDimAttr,
-               SYCLIntelNoGlobalWorkOffsetAttr, SYCLSimdAttr>(A);
+               SYCLIntelNoGlobalWorkOffsetAttr, SYCLSimdAttr, SYCLIntelGPUCacheConfigAttr>(A);
   });
 
   // Allow the kernel attribute "use_stall_enable_clusters" only on lambda
@@ -3371,6 +3371,7 @@ void Sema::MarkDevice(void) {
         case attr::Kind::SYCLIntelNoGlobalWorkOffset:
         case attr::Kind::SYCLIntelUseStallEnableClusters:
         case attr::Kind::SYCLIntelLoopFuse:
+        case attr::Kind::SYCLIntelGPUCacheConfig:
         case attr::Kind::SYCLSimd: {
           if ((A->getKind() == attr::Kind::SYCLSimd) && KernelBody &&
               !KernelBody->getAttr<SYCLSimdAttr>()) {

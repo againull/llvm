@@ -455,6 +455,15 @@ static string_vector saveDeviceImageProperty(
           {"isEsimdImage", true});
     }
 
+    for (auto &F : *ResultModules[I].get()) {
+    if (MDNode *MD = F.getMetadata("gpu_cache_config")) {
+      printf("GPU cache config metadata found\n");
+      ConstantInt *CI = mdconst::extract<ConstantInt>(MD->getOperand(0));
+      PropSet[llvm::util::PropertySetRegistry::SYCL_MISC_PROP].insert(
+          std::make_pair(F.getName(), CI->getZExtValue()));
+    }
+    }
+
     std::error_code EC;
     std::string SCFile =
         makeResultFileName(".prop", I, ImgPSInfo.IsEsimdKernel ? "esimd_" : "");
