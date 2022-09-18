@@ -468,7 +468,7 @@ protected:
 
       // Accessing and changing of an event isn't atomic operation.
       // Hence, here is the lock for thread-safety.
-      std::lock_guard<std::shared_mutex> Lock{MLastEventMtx};
+      std::lock_guard<std::mutex> Lock{MLastEventMtx};
 
       if (MLastCGType == CG::CGTYPE::None)
         MLastCGType = Type;
@@ -579,13 +579,18 @@ private:
   void addEvent(const event &Event);
 
   /// Protects all the fields that can be changed by class' methods.
-  std::mutex MMutex;
+  mutable std::mutex MMutex;
 
   DeviceImplPtr MDevice;
   const ContextImplPtr MContext;
 
-  /// These events are tracked, but not owned, by the queue.
+  /// Events in MEventsWeak are tracked, but not owned, by the queue.
+  /// It contains only those events which need processing in queue_impl::wait.
   std::vector<std::weak_ptr<event_impl>> MEventsWeak;
+
+  /// Events in MAuxEventsWeak are tracked, but not owned, by the queue.
+  /// It contains events which doesn't need processing in queue_impl::wait.
+  std::vector<std::weak_ptr<event_impl>> MAuxEventsWeak;
 
   /// Events without data dependencies (such as USM) need an owner,
   /// additionally, USM operations are not added to the scheduler command graph,
@@ -610,7 +615,7 @@ private:
   // This event is employed for enhanced dependency tracking with in-order queue
   // Access to the event should be guarded with MLastEventMtx
   event MLastEvent;
-  mutable std::shared_mutex MLastEventMtx;
+  mutable std::mutex MLastEventMtx;
   // Used for in-order queues in pair with MLastEvent
   // Host tasks are explicitly synchronized in RT, pi tasks - implicitly by
   // backend. Using type to setup explicit sync between host and pi tasks.
