@@ -17,9 +17,14 @@
 #ifndef PI_OPENCL_HPP
 #define PI_OPENCL_HPP
 
+#include <sycl/detail/cl.h>
+
+#include <atomic>
 #include <climits>
+#include <mutex>
 #include <regex>
 #include <string>
+#include <unordered_set>
 
 // This version should be incremented for any change made to this file or its
 // corresponding .cpp file.
@@ -114,5 +119,16 @@ inline const OpenCLVersion V2_2(2, 2);
 inline const OpenCLVersion V3_0(3, 0);
 
 } // namespace OCLV
+
+struct _pi_queue {
+  _pi_queue(cl_command_queue handle) : cl_queue{handle}, ref_count{1} {}
+
+  cl_command_queue cl_queue;
+  std::atomic<uint32_t> ref_count;
+  std::mutex MMutex;
+  std::unordered_set<cl_event> Events;
+  void addEvent(cl_event Event) { Events.insert(Event); }
+  void removeEvent(cl_event Event) { Events.erase(Event); }
+};
 
 #endif // PI_OPENCL_HPP

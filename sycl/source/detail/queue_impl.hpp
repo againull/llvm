@@ -121,7 +121,11 @@ public:
     if (!MHostQueue) {
       const QueueOrder QOrder =
           MIsInorder ? QueueOrder::Ordered : QueueOrder::OOO;
-      MQueues.push_back(createQueue(QOrder));
+      auto queue = createQueue(QOrder);
+      if (!queue) {
+        std::cout << "queue is null" << std::endl;
+      }
+      MQueues.push_back(queue);
     }
   }
 

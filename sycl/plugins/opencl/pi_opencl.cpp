@@ -17,7 +17,6 @@
 #define CL_USE_DEPRECATED_OPENCL_1_2_APIS
 
 #include <pi_opencl.hpp>
-#include <sycl/detail/cl.h>
 #include <sycl/detail/iostream_proxy.hpp>
 #include <sycl/detail/pi.h>
 
@@ -484,21 +483,78 @@ pi_result piQueueCreate(pi_context context, pi_device device,
 
   CHECK_ERR_SET_NULL_RET(ret_err, queue, ret_err);
 
+  cl_command_queue cl_queue;
   if (version >= OCLV::V2_0) {
-    *queue = cast<pi_queue>(clCreateCommandQueue(
+    cl_queue = clCreateCommandQueue(
         cast<cl_context>(context), cast<cl_device_id>(device),
         cast<cl_command_queue_properties>(properties) & SupportByOpenCL,
-        &ret_err));
+        &ret_err);
+    *queue = new _pi_queue(cl_queue);
     return cast<pi_result>(ret_err);
   }
 
   cl_queue_properties CreationFlagProperties[] = {
       CL_QUEUE_PROPERTIES,
       cast<cl_command_queue_properties>(properties) & SupportByOpenCL, 0};
-  *queue = cast<pi_queue>(clCreateCommandQueueWithProperties(
+  cl_queue = clCreateCommandQueueWithProperties(
       cast<cl_context>(context), cast<cl_device_id>(device),
-      CreationFlagProperties, &ret_err));
+      CreationFlagProperties, &ret_err);
+  *queue = new _pi_queue(cl_queue);
+
   return cast<pi_result>(ret_err);
+}
+
+pi_result piQueueRetain(pi_queue queue) {
+  cl_int ret_err = clRetainCommandQueue(queue->cl_queue);
+  if (ret_err != CL_SUCCESS)
+    return cast<pi_result>(ret_err);
+
+  queue->ref_count++;
+  return PI_SUCCESS;
+}
+
+pi_result piQueueRelease(pi_queue queue) {
+  cl_int ret_err = clReleaseCommandQueue(queue->cl_queue);
+  if (ret_err != CL_SUCCESS)
+    return cast<pi_result>(ret_err);
+  if (--queue->ref_count == 0)
+    delete queue;
+
+  return PI_SUCCESS;
+}
+
+pi_result piQueueStatus(pi_queue queue) { return PI_SUCCESS; }
+
+pi_result piQueueFinish(pi_queue queue) {
+  std::lock_guard<std::mutex> Lock(queue->MMutex);
+
+  cl_int ret_err = clFinish(queue->cl_queue);
+
+  if (ret_err != CL_SUCCESS)
+    return cast<pi_result>(ret_err);
+
+  return PI_SUCCESS;
+}
+
+pi_result piQueueFlush(pi_queue queue) {
+  cl_int ret_err = clFlush(queue->cl_queue);
+  if (ret_err != CL_SUCCESS)
+    return cast<pi_result>(ret_err);
+
+  return PI_SUCCESS;
+}
+
+pi_result piQueueGetInfo(pi_queue queue, pi_queue_info paramName,
+                         size_t paramValueSize, void *paramValue,
+                         size_t *paramValueSizeRet) {
+
+  cl_int ret_err = clGetCommandQueueInfo(
+      queue->cl_queue, cast<cl_command_queue_info>(paramName), paramValueSize,
+      paramValue, paramValueSizeRet);
+  if (ret_err != CL_SUCCESS)
+    return cast<pi_result>(ret_err);
+
+  return PI_SUCCESS;
 }
 
 pi_result piextQueueCreateWithNativeHandle(pi_native_handle nativeHandle,
@@ -507,7 +563,7 @@ pi_result piextQueueCreateWithNativeHandle(pi_native_handle nativeHandle,
                                            pi_queue *piQueue) {
   (void)ownNativeHandle;
   assert(piQueue != nullptr);
-  *piQueue = reinterpret_cast<pi_queue>(nativeHandle);
+  *piQueue = new _pi_queue(cast<cl_command_queue>(nativeHandle));
   clRetainCommandQueue(cast<cl_command_queue>(nativeHandle));
   return PI_SUCCESS;
 }
@@ -1002,12 +1058,12 @@ pi_result piEnqueueMemBufferMap(pi_queue command_queue, pi_mem buffer,
                                 pi_event *event, void **ret_map) {
 
   pi_result ret_err = PI_ERROR_INVALID_OPERATION;
-  *ret_map = cast<void *>(clEnqueueMapBuffer(
-      cast<cl_command_queue>(command_queue), cast<cl_mem>(buffer),
-      cast<cl_bool>(blocking_map), map_flags, offset, size,
-      cast<cl_uint>(num_events_in_wait_list),
-      cast<const cl_event *>(event_wait_list), cast<cl_event *>(event),
-      cast<cl_int *>(&ret_err)));
+  *ret_map = cast<void *>(
+      clEnqueueMapBuffer(command_queue->cl_queue, cast<cl_mem>(buffer),
+                         cast<cl_bool>(blocking_map), map_flags, offset, size,
+                         cast<cl_uint>(num_events_in_wait_list),
+                         cast<const cl_event *>(event_wait_list),
+                         cast<cl_event *>(event), cast<cl_int *>(&ret_err)));
   return ret_err;
 }
 
@@ -1200,9 +1256,8 @@ pi_result piextUSMEnqueueMemset(pi_queue queue, void *ptr, pi_int32 value,
 
   // Have to look up the context from the kernel
   cl_context CLContext;
-  cl_int CLErr =
-      clGetCommandQueueInfo(cast<cl_command_queue>(queue), CL_QUEUE_CONTEXT,
-                            sizeof(cl_context), &CLContext, nullptr);
+  cl_int CLErr = clGetCommandQueueInfo(queue->cl_queue, CL_QUEUE_CONTEXT,
+                                       sizeof(cl_context), &CLContext, nullptr);
   if (CLErr != CL_SUCCESS) {
     return cast<pi_result>(CLErr);
   }
@@ -1213,13 +1268,22 @@ pi_result piextUSMEnqueueMemset(pi_queue queue, void *ptr, pi_int32 value,
           cast<pi_context>(CLContext), &FuncPtr);
 
   if (FuncPtr) {
-    RetVal = cast<pi_result>(FuncPtr(cast<cl_command_queue>(queue), ptr, value,
-                                     count, num_events_in_waitlist,
-                                     cast<const cl_event *>(events_waitlist),
-                                     cast<cl_event *>(event)));
+    RetVal = cast<pi_result>(FuncPtr(
+        queue->cl_queue, ptr, value, count, num_events_in_waitlist,
+        cast<const cl_event *>(events_waitlist), cast<cl_event *>(event)));
   }
 
   return RetVal;
+}
+
+void CallBack(cl_event event, cl_int type, void *user_data) {
+  auto queue = cast<pi_queue>(user_data);
+  {
+    std::lock_guard<std::mutex> Lock(queue->MMutex);
+    queue->removeEvent(event);
+  }
+  clReleaseEvent(event);
+  piQueueRelease(queue);
 }
 
 /// USM Memcpy API
@@ -1240,9 +1304,8 @@ pi_result piextUSMEnqueueMemcpy(pi_queue queue, pi_bool blocking, void *dst_ptr,
 
   // Have to look up the context from the kernel
   cl_context CLContext;
-  cl_int CLErr =
-      clGetCommandQueueInfo(cast<cl_command_queue>(queue), CL_QUEUE_CONTEXT,
-                            sizeof(cl_context), &CLContext, nullptr);
+  cl_int CLErr = clGetCommandQueueInfo(queue->cl_queue, CL_QUEUE_CONTEXT,
+                                       sizeof(cl_context), &CLContext, nullptr);
   if (CLErr != CL_SUCCESS) {
     return cast<pi_result>(CLErr);
   }
@@ -1252,12 +1315,20 @@ pi_result piextUSMEnqueueMemcpy(pi_queue queue, pi_bool blocking, void *dst_ptr,
       getExtFuncFromContext<clEnqueueMemcpyName, clEnqueueMemcpyINTEL_fn>(
           cast<pi_context>(CLContext), &FuncPtr);
 
-  if (FuncPtr) {
-    RetVal = cast<pi_result>(
-        FuncPtr(cast<cl_command_queue>(queue), blocking, dst_ptr, src_ptr, size,
-                num_events_in_waitlist, cast<const cl_event *>(events_waitlist),
-                cast<cl_event *>(event)));
+  {
+    std::lock_guard<std::mutex> Lock(queue->MMutex);
+    if (FuncPtr) {
+      RetVal = cast<pi_result>(FuncPtr(queue->cl_queue, blocking, dst_ptr,
+                                       src_ptr, size, num_events_in_waitlist,
+                                       cast<const cl_event *>(events_waitlist),
+                                       cast<cl_event *>(event)));
+    }
+    queue->addEvent(*cast<cl_event *>(event));
   }
+  piQueueRetain(queue);
+  clRetainEvent(*cast<cl_event *>(event));
+  RetVal = cast<pi_result>(clSetEventCallback(*cast<cl_event *>(event),
+                                              CL_COMPLETE, CallBack, queue));
 
   return RetVal;
 }
@@ -1284,7 +1355,7 @@ pi_result piextUSMEnqueuePrefetch(pi_queue queue, const void *ptr, size_t size,
     return PI_ERROR_INVALID_VALUE;
 
   return cast<pi_result>(clEnqueueMarkerWithWaitList(
-      cast<cl_command_queue>(queue), num_events_in_waitlist,
+      queue->cl_queue, num_events_in_waitlist,
       cast<const cl_event *>(events_waitlist), cast<cl_event *>(event)));
 
   /*
@@ -1292,7 +1363,7 @@ pi_result piextUSMEnqueuePrefetch(pi_queue queue, const void *ptr, size_t size,
   // Have to look up the context from the kernel
   cl_context CLContext;
   cl_int CLErr =
-      clGetCommandQueueInfo(cast<cl_command_queue>(queue), CL_QUEUE_CONTEXT,
+      clGetCommandQueueInfo(queue->cl_queue, CL_QUEUE_CONTEXT,
                             sizeof(cl_context), &CLContext, nullptr);
   if (CLErr != CL_SUCCESS) {
     return cast<pi_result>(CLErr);
@@ -1306,7 +1377,7 @@ pi_result piextUSMEnqueuePrefetch(pi_queue queue, const void *ptr, size_t size,
     RetVal = Err;
   } else {
     RetVal = cast<pi_result>(FuncPtr(
-        cast<cl_command_queue>(queue), ptr, size, flags, num_events_in_waitlist,
+        queue->cl_queue, ptr, size, flags, num_events_in_waitlist,
         reinterpret_cast<const cl_event *>(events_waitlist),
         reinterpret_cast<cl_event *>(event)));
   }
@@ -1328,16 +1399,15 @@ pi_result piextUSMEnqueueMemAdvise(pi_queue queue, const void *ptr,
   (void)length;
   (void)advice;
 
-  return cast<pi_result>(
-      clEnqueueMarkerWithWaitList(cast<cl_command_queue>(queue), 0, nullptr,
-                                  reinterpret_cast<cl_event *>(event)));
+  return cast<pi_result>(clEnqueueMarkerWithWaitList(
+      queue->cl_queue, 0, nullptr, reinterpret_cast<cl_event *>(event)));
 
   /*
   // Change to use this once drivers support it.
 
   // Have to look up the context from the kernel
   cl_context CLContext;
-  cl_int CLErr = clGetCommandQueueInfo(cast<cl_command_queue>(queue),
+  cl_int CLErr = clGetCommandQueueInfo(queue->cl_queue,
                                  CL_QUEUE_CONTEXT,
                                  sizeof(cl_context),
                                  &CLContext, nullptr);
@@ -1353,7 +1423,7 @@ pi_result piextUSMEnqueueMemAdvise(pi_queue queue, const void *ptr,
   if (Err != PI_SUCCESS) {
     RetVal = Err;
   } else {
-    RetVal = cast<pi_result>(FuncPtr(cast<cl_command_queue>(queue),
+    RetVal = cast<pi_result>(FuncPtr(queue->cl_queue,
                                      ptr, length, advice, 0, nullptr,
                                      reinterpret_cast<cl_event *>(event)));
   }
@@ -1475,7 +1545,9 @@ pi_result piextContextGetNativeHandle(pi_context context,
 
 pi_result piextQueueGetNativeHandle(pi_queue queue,
                                     pi_native_handle *nativeHandle) {
-  return piextGetNativeHandle(queue, nativeHandle);
+  assert(nativeHandle != nullptr);
+  *nativeHandle = cast<pi_native_handle>(queue->cl_queue);
+  return PI_SUCCESS;
 }
 
 pi_result piextMemGetNativeHandle(pi_mem mem, pi_native_handle *nativeHandle) {
@@ -1540,11 +1612,11 @@ pi_result piPluginInit(pi_plugin *PluginInit) {
   _PI_CL(piextContextCreateWithNativeHandle, piextContextCreateWithNativeHandle)
   // Queue
   _PI_CL(piQueueCreate, piQueueCreate)
-  _PI_CL(piQueueGetInfo, clGetCommandQueueInfo)
-  _PI_CL(piQueueFinish, clFinish)
-  _PI_CL(piQueueFlush, clFlush)
-  _PI_CL(piQueueRetain, clRetainCommandQueue)
-  _PI_CL(piQueueRelease, clReleaseCommandQueue)
+  _PI_CL(piQueueGetInfo, piQueueGetInfo)
+  _PI_CL(piQueueFinish, piQueueFinish)
+  _PI_CL(piQueueFlush, piQueueFlush)
+  _PI_CL(piQueueRetain, piQueueRetain)
+  _PI_CL(piQueueRelease, piQueueRelease)
   _PI_CL(piextQueueGetNativeHandle, piextQueueGetNativeHandle)
   _PI_CL(piextQueueCreateWithNativeHandle, piextQueueCreateWithNativeHandle)
   // Memory

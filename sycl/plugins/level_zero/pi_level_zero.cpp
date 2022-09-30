@@ -3595,6 +3595,8 @@ pi_result piQueueCreate(pi_context Context, pi_device Device,
   return PI_SUCCESS;
 }
 
+pi_result piQueueStatus(pi_queue Queue) { return PI_SUCCESS; }
+
 pi_result piQueueGetInfo(pi_queue Queue, pi_queue_info ParamName,
                          size_t ParamValueSize, void *ParamValue,
                          size_t *ParamValueSizeRet) {
