@@ -17,16 +17,25 @@
 #ifndef PI_OPENCL_HPP
 #define PI_OPENCL_HPP
 
+#include <atomic>
 #include <climits>
 #include <regex>
 #include <string>
-
+#include <sycl/detail/cl.h>
 // This version should be incremented for any change made to this file or its
 // corresponding .cpp file.
 #define _PI_OPENCL_PLUGIN_VERSION 1
 
 #define _PI_OPENCL_PLUGIN_VERSION_STRING                                       \
   _PI_PLUGIN_VERSION_STRING(_PI_OPENCL_PLUGIN_VERSION)
+
+struct _pi_event {
+  _pi_event(cl_event event)
+      : opencl_event{event}, completed{false}, RefCount{1} {}
+  cl_event opencl_event;
+  std::atomic<bool> completed;
+  std::atomic<uint32_t> RefCount;
+};
 
 namespace OCLV {
 class OpenCLVersion {

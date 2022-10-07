@@ -5982,6 +5982,16 @@ pi_result piEventSetStatus(pi_event Event, pi_int32 ExecutionStatus) {
   return PI_SUCCESS;
 }
 
+pi_result piEventStatus(pi_event Event, bool *status) {
+  std::shared_lock<pi_shared_mutex> Lock(Event->Mutex);
+  if (Event->Completed)
+    *status = true;
+  else
+    *status = false;
+
+  return PI_SUCCESS;
+}
+
 pi_result piEventRetain(pi_event Event) {
   PI_ASSERT(Event, PI_ERROR_INVALID_EVENT);
   Event->RefCountExternal++;

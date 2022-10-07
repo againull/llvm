@@ -256,6 +256,15 @@ static pi_result USMSetIndirectAccess(pi_kernel kernel) {
 
 extern "C" {
 
+pi_result piEventStatus(pi_event event, bool *status) {
+  if (event->completed.load())
+    *status = true;
+  else
+    *status = false;
+
+  return PI_SUCCESS;
+}
+
 pi_result piDeviceGetInfo(pi_device device, pi_device_info paramName,
                           size_t paramValueSize, void *paramValue,
                           size_t *paramValueSizeRet) {
@@ -978,6 +987,20 @@ pi_result piEventCreate(pi_context context, pi_event *ret_event) {
   return ret_err;
 }
 
+pi_result piEventRetain(pi_event event) {
+  clRetainEvent(event->opencl_event);
+  event->RefCount++;
+  return PI_SUCCESS;
+}
+
+pi_result piEventRelease(pi_event event) {
+  clReleaseEvent(event->opencl_event);
+  if (--event->RefCount == 0)
+    delete event;
+
+  return PI_SUCCESS;
+}
+
 pi_result piextEventCreateWithNativeHandle(pi_native_handle nativeHandle,
                                            pi_context context,
                                            bool ownNativeHandle,
@@ -1222,6 +1245,12 @@ pi_result piextUSMEnqueueMemset(pi_queue queue, void *ptr, pi_int32 value,
   return RetVal;
 }
 
+void CallBack(cl_event opencl_event, cl_int type, void *user_data) {
+  auto event = cast<pi_event>(user_data);
+  event->completed.store(true);
+  piEventRelease(event);
+}
+
 /// USM Memcpy API
 ///
 /// \param queue is the queue to submit to
@@ -1253,10 +1282,15 @@ pi_result piextUSMEnqueueMemcpy(pi_queue queue, pi_bool blocking, void *dst_ptr,
           cast<pi_context>(CLContext), &FuncPtr);
 
   if (FuncPtr) {
+    cl_event opencl_event;
     RetVal = cast<pi_result>(
         FuncPtr(cast<cl_command_queue>(queue), blocking, dst_ptr, src_ptr, size,
                 num_events_in_waitlist, cast<const cl_event *>(events_waitlist),
-                cast<cl_event *>(event)));
+                &opencl_event));
+    *event = new _pi_event(opencl_event);
+    piEventRetain(*event);
+    RetVal = cast<pi_result>(
+        clSetEventCallback(opencl_event, CL_COMPLETE, CallBack, *event));
   }
 
   return RetVal;
@@ -1591,8 +1625,9 @@ pi_result piPluginInit(pi_plugin *PluginInit) {
   _PI_CL(piEventsWait, clWaitForEvents)
   _PI_CL(piEventSetCallback, clSetEventCallback)
   _PI_CL(piEventSetStatus, clSetUserEventStatus)
-  _PI_CL(piEventRetain, clRetainEvent)
-  _PI_CL(piEventRelease, clReleaseEvent)
+  _PI_CL(piEventStatus, piEventStatus)
+  _PI_CL(piEventRetain, piEventRetain)
+  _PI_CL(piEventRelease, piEventRelease)
   _PI_CL(piextEventGetNativeHandle, piextGetNativeHandle)
   _PI_CL(piextEventCreateWithNativeHandle, piextEventCreateWithNativeHandle)
   // Sampler

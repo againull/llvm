@@ -1418,6 +1418,8 @@ __SYCL_EXPORT pi_result piEventSetCallback(
 __SYCL_EXPORT pi_result piEventSetStatus(pi_event event,
                                          pi_int32 execution_status);
 
+__SYCL_EXPORT pi_result piEventStatus(pi_event event, bool *completed);
+
 __SYCL_EXPORT pi_result piEventRetain(pi_event event);
 
 __SYCL_EXPORT pi_result piEventRelease(pi_event event);

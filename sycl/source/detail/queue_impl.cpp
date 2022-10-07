@@ -222,21 +222,41 @@ void queue_impl::addSharedEvent(const event &Event) {
   // of them can be released.
   const size_t EventThreshold = 128;
   if (MEventsShared.size() >= EventThreshold) {
-    // Generally, the vector is ordered so that the oldest events are in the
-    // front and the newer events are in the end.  So, search to find the first
-    // event that isn't yet complete.  All the events prior to that can be
-    // erased. This could leave some few events further on that have completed
-    // not yet erased, but that is OK.  This cleanup doesn't have to be perfect.
-    // This also keeps the algorithm linear rather than quadratic because it
-    // doesn't continually recheck things towards the back of the list that
-    // really haven't had time to complete.
-    MEventsShared.erase(
-        MEventsShared.begin(),
-        std::find_if(
-            MEventsShared.begin(), MEventsShared.end(), [](const event &E) {
-              return E.get_info<info::event::command_execution_status>() !=
-                     info::event_command_status::complete;
-            }));
+
+    const detail::plugin &Plugin = getPlugin();
+
+    if (Plugin.getBackend() == backend::ext_oneapi_level_zero) {
+      // For level zero we need to check all events because events are marked as
+      // completed in a random manner during command list recycling in the L0
+      // plugin.
+      for (auto It = MEventsShared.begin(); It != MEventsShared.end(); It++) {
+        auto EventImpl = getSyclObjImpl(*It);
+        bool Completed = false;
+        Plugin.call<PiApiKind::piEventStatus>(EventImpl->getHandleRef(),
+                                              &Completed);
+        if (Completed)
+          It = MEventsShared.erase(It);
+      }
+    } else {
+      // Generally, the vector is ordered so that the oldest events are in the
+      // front and the newer events are in the end.  So, search to find the
+      // first event that isn't yet complete.  All the events prior to that can
+      // be erased. This could leave some few events further on that have
+      // completed not yet erased, but that is OK.  This cleanup doesn't have to
+      // be perfect. This also keeps the algorithm linear rather than quadratic
+      // because it doesn't continually recheck things towards the back of the
+      // list that really haven't had time to complete.
+      MEventsShared.erase(
+          MEventsShared.begin(),
+          std::find_if(MEventsShared.begin(), MEventsShared.end(),
+                       [](const event &E) {
+                         auto EventImpl = getSyclObjImpl(E);
+                         bool Completed = false;
+                         EventImpl->getPlugin().call<PiApiKind::piEventStatus>(
+                             EventImpl->getHandleRef(), &Completed);
+                         return !Completed;
+                       }));
+    }
   }
   MEventsShared.push_back(Event);
 }
@@ -337,7 +357,7 @@ void queue_impl::wait(const detail::code_location &CodeLoc) {
 #endif
 
   std::vector<std::weak_ptr<event_impl>> WeakEvents;
-  std::vector<event> SharedEvents;
+  std::list<event> SharedEvents;
   {
     std::lock_guard<std::mutex> Lock(MMutex);
     WeakEvents.swap(MEventsWeak);
