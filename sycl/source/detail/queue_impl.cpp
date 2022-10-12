@@ -214,14 +214,20 @@ void queue_impl::addEvent(const event &Event) {
 /// but some events have no other owner. In this case,
 /// addSharedEvent will have the queue track the events via a shared pointer.
 void queue_impl::addSharedEvent(const event &Event) {
-  std::lock_guard<std::mutex> Lock(MMutex);
   // Events stored in MEventsShared are not released anywhere else aside from
   // calls to queue::wait/wait_and_throw, which a user application might not
   // make, and ~queue_impl(). If the number of events grows large enough,
   // there's a good chance that most of them are already completed and ownership
   // of them can be released.
-  const size_t EventThreshold = 128;
-  if (MEventsShared.size() >= EventThreshold) {
+  std::list<event> CleanupList;
+  {
+    std::lock_guard<std::mutex> Lock(MMutex);
+    const size_t EventThreshold = 128;
+    if (MEventsShared.size() >= EventThreshold)
+      CleanupList.splice(CleanupList.begin(), MEventsShared);
+  }
+
+  if (CleanupList.size() > 0) {
     // Generally, the vector is ordered so that the oldest events are in the
     // front and the newer events are in the end.  So, search to find the first
     // event that isn't yet complete.  All the events prior to that can be
@@ -230,15 +236,22 @@ void queue_impl::addSharedEvent(const event &Event) {
     // This also keeps the algorithm linear rather than quadratic because it
     // doesn't continually recheck things towards the back of the list that
     // really haven't had time to complete.
-    MEventsShared.erase(
-        MEventsShared.begin(),
+    CleanupList.erase(
+        CleanupList.begin(),
         std::find_if(
-            MEventsShared.begin(), MEventsShared.end(), [](const event &E) {
+            CleanupList.begin(), CleanupList.end(), [](const event &E) {
               return E.get_info<info::event::command_execution_status>() !=
                      info::event_command_status::complete;
             }));
   }
-  MEventsShared.push_back(Event);
+
+  {
+    std::lock_guard<std::mutex> Lock(MMutex);
+    if (CleanupList.size() > 0) {
+      MEventsShared.splice(MEventsShared.begin(), CleanupList);
+    }
+    MEventsShared.push_back(Event);
+  }
 }
 
 void *queue_impl::instrumentationProlog(const detail::code_location &CodeLoc,
@@ -337,7 +350,7 @@ void queue_impl::wait(const detail::code_location &CodeLoc) {
 #endif
 
   std::vector<std::weak_ptr<event_impl>> WeakEvents;
-  std::vector<event> SharedEvents;
+  std::list<event> SharedEvents;
   {
     std::lock_guard<std::mutex> Lock(MMutex);
     WeakEvents.swap(MEventsWeak);
