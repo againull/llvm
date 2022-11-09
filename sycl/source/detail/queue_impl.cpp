@@ -219,15 +219,15 @@ void queue_impl::addSharedEvent(const event &Event) {
   // make, and ~queue_impl(). If the number of events grows large enough,
   // there's a good chance that most of them are already completed and ownership
   // of them can be released.
-  std::list<event> CleanupList;
+  std::list<event> CleanupListTemp;
   {
     std::lock_guard<std::mutex> Lock(MMutex);
     const size_t EventThreshold = 128;
     if (MEventsShared.size() >= EventThreshold)
-      CleanupList.splice(CleanupList.begin(), MEventsShared);
+      CleanupListTemp.splice(CleanupListTemp.begin(), MEventsShared);
   }
 
-  if (CleanupList.size() > 0) {
+  if (CleanupListTemp.size() > 0) {
     // Generally, the vector is ordered so that the oldest events are in the
     // front and the newer events are in the end.  So, search to find the first
     // event that isn't yet complete.  All the events prior to that can be
@@ -236,20 +236,45 @@ void queue_impl::addSharedEvent(const event &Event) {
     // This also keeps the algorithm linear rather than quadratic because it
     // doesn't continually recheck things towards the back of the list that
     // really haven't had time to complete.
-    CleanupList.erase(
-        CleanupList.begin(),
-        std::find_if(
-            CleanupList.begin(), CleanupList.end(), [](const event &E) {
-              return E.get_info<info::event::command_execution_status>() !=
-                     info::event_command_status::complete;
-            }));
+    auto MGarbageCollector = [this, InputList = move(CleanupListTemp)]() {
+      std::list<event> CleanupList = std::move(InputList);
+      {
+        std::lock_guard<std::mutex> Lock(MMutex);
+        const size_t EventThreshold = 128;
+        if (MEventsShared.size() < EventThreshold)
+          return;
+
+        CleanupList.splice(CleanupList.begin(), MEventsShared);
+        MNeedsCleanup = false;
+      }
+
+      // Generally, the vector is ordered so that the oldest events are in the
+      // front and the newer events are in the end.  So, search to find the
+      // first event that isn't yet complete.  All the events prior to that can
+      // be erased. This could leave some few events further on that have
+      // completed not yet erased, but that is OK.  This cleanup doesn't have to
+      // be perfect. This also keeps the algorithm linear rather than quadratic
+      // because it doesn't continually recheck things towards the back of the
+      // list that really haven't had time to complete.
+      CleanupList.erase(
+          CleanupList.begin(),
+          std::find_if(
+              CleanupList.begin(), CleanupList.end(), [](const event &E) {
+                return E.get_info<info::event::command_execution_status>() !=
+                       info::event_command_status::complete;
+              }));
+
+      std::lock_guard<std::mutex> Lock(MMutex);
+      if (CleanupList.size() > 0) {
+        MEventsShared.splice(MEventsShared.begin(), CleanupList);
+      }
+    };
+
+    MThreadPool.submit(MGarbageCollector);
   }
 
   {
     std::lock_guard<std::mutex> Lock(MMutex);
-    if (CleanupList.size() > 0) {
-      MEventsShared.splice(MEventsShared.begin(), CleanupList);
-    }
     MEventsShared.push_back(Event);
   }
 }

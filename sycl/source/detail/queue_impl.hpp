@@ -599,6 +599,8 @@ private:
   exception_list MExceptions;
   const async_handler MAsyncHandler;
   const property_list MPropList;
+  ThreadPool MThreadPool;
+  bool MNeedsCleanup = false;
 
   /// List of queues created for FPGA device from a single SYCL queue.
   std::vector<RT::PiQueue> MQueues;
