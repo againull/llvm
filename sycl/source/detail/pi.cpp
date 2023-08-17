@@ -22,6 +22,7 @@
 #include <sycl/detail/pi.hpp>
 #include <sycl/detail/stl_type_traits.hpp>
 #include <sycl/version.hpp>
+#include <filesystem>
 
 #include <bitset>
 #include <cstdarg>
@@ -385,7 +386,7 @@ std::vector<std::pair<std::string, backend>> findPlugins() {
 
 // Load the Plugin by calling the OS dependent library loading call.
 // Return the handle to the Library.
-void *loadPlugin(const std::string &PluginPath) {
+void *loadPlugin(const std::filesystem::path &PluginPath) {
   return loadOsPluginLibrary(PluginPath);
 }
 
@@ -442,15 +443,14 @@ static void initializePlugins(std::vector<PluginPtr> &Plugins) {
     std::cerr << "SYCL_PI_TRACE[all]: "
               << "No Plugins Found." << std::endl;
 
-  const std::string LibSYCLDir =
-      sycl::detail::OSUtil::getCurrentDSODir() + sycl::detail::OSUtil::DirSep;
+  std::filesystem::path LibSYCLDir = sycl::detail::OSUtil::getCurrentDSODirPath();
 
   for (unsigned int I = 0; I < PluginNames.size(); I++) {
     std::shared_ptr<PiPlugin> PluginInformation = std::make_shared<PiPlugin>(
         PiPlugin{_PI_H_VERSION_STRING, _PI_H_VERSION_STRING,
                  /*Targets=*/nullptr, /*FunctionPointers=*/{}});
 
-    void *Library = loadPlugin(LibSYCLDir + PluginNames[I].first);
+    void *Library = loadPlugin(LibSYCLDir / PluginNames[I].first); // loadPlugin(path)
 
     if (!Library) {
       if (trace(PI_TRACE_ALL)) {

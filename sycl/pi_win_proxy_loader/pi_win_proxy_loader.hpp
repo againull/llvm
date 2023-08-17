@@ -10,6 +10,7 @@
 
 #ifdef _WIN32
 #include <string>
+#include <filesystem>
 
-__declspec(dllexport) void *getPreloadedPlugin(const std::string &PluginPath);
+__declspec(dllexport) void *getPreloadedPlugin(const std::filesystem::path &PluginPath);
 #endif
