@@ -1547,6 +1547,11 @@ template <> struct NDRangeReduction<reduction::strategy::range_basic> {
           else if (V)
             Out[E] = *V;
         }
+
+        // Ensure item 0 is finished with LocalReds before next iteration
+        if (E != NElements - 1) {
+          NDId.barrier();
+        }
       }
 
       // Signal this work-group has finished after all values are reduced. We
