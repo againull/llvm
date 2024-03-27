@@ -23,12 +23,13 @@ template <int Dims> auto get_global_id(id<Dims> Id) { return Id; }
 // types/operations.
 using T = int;
 using BinOpTy = std::plus<T>;
+constexpr static size_t Extent = 4;
 
 // On Windows, allocating new memory and then initializing it is slow for some
 // reason (not related to reductions). Try to re-use the same memory between
 // test cases.
 struct RedStorage {
-  RedStorage(queue &q) : q(q), Ptr(malloc_device<T>(1, q)), Buf(1) {}
+  RedStorage(queue &q) : q(q), Ptr(malloc_device<T>(Extent, q)), Buf(Extent) {}
   ~RedStorage() { free(Ptr, q); }
 
   template <bool UseUSM> auto get() {
@@ -43,7 +44,7 @@ struct RedStorage {
 };
 
 template <bool UseUSM, bool InitToIdentity,
-          detail::reduction::strategy Strategy, typename RangeTy>
+          detail::reduction::strategy Strategy, typename RangeTy, size_t NumElements = 1>
 static void test(RedStorage &Storage, RangeTy Range) {
   queue &q = Storage.q;
 
@@ -59,17 +60,28 @@ static void test(RedStorage &Storage, RangeTy Range) {
 
   q.submit([&](handler &cgh) {
      auto RedAcc = GetRedAcc(cgh);
-     cgh.single_task([=]() { RedAcc[0] = Init; });
+     cgh.single_task([=]() { 
+      for (int I = 0; I < NumElements; I++)
+        RedAcc[I] = Init; 
+     });
    }).wait();
 
   q.submit([&](handler &cgh) {
      auto RedSycl = [&]() {
        if constexpr (UseUSM)
+        if constexpr (NumElements == 1) {
          if constexpr (InitToIdentity)
            return reduction(Red, BinOpTy{},
                             property::reduction::initialize_to_identity{});
          else
            return reduction(Red, BinOpTy{});
+        } else {
+         if constexpr (InitToIdentity)
+           return reduction(sycl::span<T, NumElements>(Red, NumElements), BinOpTy{},
+                            property::reduction::initialize_to_identity{});
+         else
+           return reduction(sycl::span<T, NumElements>(Red, NumElements), BinOpTy{});
+        }
        else if constexpr (InitToIdentity)
          return reduction(Red, cgh, BinOpTy{},
                           property::reduction::initialize_to_identity{});
@@ -78,24 +90,35 @@ static void test(RedStorage &Storage, RangeTy Range) {
      }();
      detail::reduction_parallel_for<detail::auto_name, Strategy>(
          cgh, Range, ext::oneapi::experimental::empty_properties_t{}, RedSycl,
-         [=](auto Item, auto &Red) { Red.combine(T{1}); });
+         [=](auto Item, auto &Red) { 
+            for (int I = 0; I < NumElements; I++) 
+              Red[I].combine(T{I + 1}); 
+          });
    }).wait();
-  sycl::buffer<T> ResultBuf{sycl::range{1}};
+  sycl::buffer<T> ResultBuf{sycl::range{NumElements}};
   q.submit([&](handler &cgh) {
     sycl::accessor Result{ResultBuf, cgh};
     auto RedAcc = GetRedAcc(cgh);
-    cgh.single_task([=]() { Result[0] = RedAcc[0]; });
+    cgh.single_task([=]() { 
+      for (int I = 0; I < NumElements; I++)
+        Result[I] = RedAcc[I]; 
+    });
   });
   sycl::host_accessor Result{ResultBuf};
   auto N = get_global_range(Range).size();
-  int Expected = InitToIdentity ? N : Init + N;
+  int Expected[Extent];
+  for (int I = 0; I < NumElements; I++) {
+   Expected[I] = InitToIdentity ? N * (I + 1) : Init + N * (I + 1);
+  }
 #if defined(__PRETTY_FUNCTION__)
   std::cout << __PRETTY_FUNCTION__;
 #elif defined(__FUNCSIG__)
   std::cout << __FUNCSIG__;
 #endif
-  std::cout << ": " << Result[0] << ", expected " << Expected << std::endl;
-  assert(Result[0] == Expected);
+  for (int I = 0; I < NumElements; I++) {
+    std::cout << ": " << Result[I] << ", expected " << Expected[I] << std::endl;
+    assert(Result[I] == Expected[I]);
+  }
 }
 
 template <int... Inds, class F>
@@ -119,9 +142,11 @@ void testAllStrategies(RedStorage &Storage, RangeTy Range) {
 
 int main() {
   queue q;
+
   RedStorage Storage(q);
 
   auto TestRange = [&](auto Range) {
+    test<true, true, detail::reduction::strategy::range_basic, decltype(Range), 1>(Storage, Range);
     testAllStrategies<true, true>(Storage, Range);
     testAllStrategies<true, false>(Storage, Range);
     testAllStrategies<false, true>(Storage, Range);
