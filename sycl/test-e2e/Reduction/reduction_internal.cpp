@@ -130,13 +130,13 @@ template <int count, class F> void loop(F &&f) {
   loop_impl(std::make_integer_sequence<int, count>{}, std::forward<F>(f));
 }
 
-template <bool UseUSM, bool InitToIdentity, typename RangeTy>
+template <bool UseUSM, bool InitToIdentity, typename RangeTy, size_t NumElements = 1>
 void testAllStrategies(RedStorage &Storage, RangeTy Range) {
   loop<(int)detail::reduction::strategy::multi>([&](auto Id) {
     constexpr auto Strategy =
         // Skip auto_select == 0.
         detail::reduction::strategy{decltype(Id)::value + 1};
-    test<UseUSM, InitToIdentity, Strategy>(Storage, Range);
+    test<UseUSM, InitToIdentity, Strategy, RangeTy, NumElements>(Storage, Range);
   });
 }
 
@@ -146,11 +146,11 @@ int main() {
   RedStorage Storage(q);
 
   auto TestRange = [&](auto Range) {
-    test<true, true, detail::reduction::strategy::range_basic, decltype(Range), 1>(Storage, Range);
-    testAllStrategies<true, true>(Storage, Range);
-    testAllStrategies<true, false>(Storage, Range);
-    testAllStrategies<false, true>(Storage, Range);
-    testAllStrategies<false, false>(Storage, Range);
+    //test<true, true, detail::reduction::strategy::range_basic, decltype(Range), 1>(Storage, Range);
+    testAllStrategies<true, true, decltype(Range), Extent>(Storage, Range);
+    testAllStrategies<true, false, decltype(Range), Extent>(Storage, Range);
+    testAllStrategies<false, true, decltype(Range), Extent>(Storage, Range);
+    testAllStrategies<false, false, decltype(Range), Extent>(Storage, Range);
   };
 
   TestRange(range<1>{42});
