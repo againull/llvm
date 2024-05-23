@@ -48,7 +48,7 @@ public:
   sycl::span<std::byte, Extent> get_memory() const { return scratch; }
 };
 
-// ---- sorters
+// Default sorter provided by the first version of the extension specification.
 template <typename Compare = std::less<>> class default_sorter {
   Compare comp;
   std::byte *scratch;
@@ -111,6 +111,108 @@ public:
   }
 };
 
+// Default sorters provided by the second version of the extension
+// specification.
+namespace default_sorters {
+
+template <typename CompareT = std::less<>> class joint_sorter {
+  CompareT comp;
+  std::byte *scratch;
+  size_t scratch_size;
+
+public:
+  template <size_t Extent>
+  joint_sorter(sycl::span<std::byte, Extent> scratch_,
+               CompareT comp_ = CompareT())
+      : comp(comp_), scratch(scratch_.data()), scratch_size(scratch_.size()) {}
+
+  template <typename Group, typename Ptr>
+  void operator()(Group g, Ptr first, Ptr last) {
+    (void)g;
+    (void)first;
+    (void)last;
+#ifdef __SYCL_DEVICE_ONLY__
+    using T = typename sycl::detail::GetValueType<Ptr>::type;
+    if (scratch_size >= memory_required<T>(Group::fence_scope, last - first))
+      sycl::detail::merge_sort(g, first, last - first, comp, scratch);
+#else
+    throw sycl::exception(
+        std::error_code(PI_ERROR_INVALID_DEVICE, sycl::sycl_category()),
+        "default_sorters::joint_sorter constructor is not supported on host "
+        "device.");
+#endif
+  }
+
+  template <typename Group, typename T> T operator()(Group g, T val) {
+#ifdef __SYCL_DEVICE_ONLY__
+    auto range_size = g.get_local_range().size();
+    if (scratch_size >= memory_required<T>(Group::fence_scope, range_size)) {
+      size_t local_id = g.get_local_linear_id();
+      T *temp = reinterpret_cast<T *>(scratch);
+      ::new (temp + local_id) T(val);
+      sycl::detail::merge_sort(g, temp, range_size, comp,
+                               scratch + range_size * sizeof(T));
+      val = temp[local_id];
+    }
+#else
+    (void)g;
+    throw sycl::exception(
+        std::error_code(PI_ERROR_INVALID_DEVICE, sycl::sycl_category()),
+        "default_sorter operator() is not supported on host device.");
+#endif
+    return val;
+  }
+
+  template <typename T>
+  static constexpr size_t memory_required(sycl::memory_scope,
+                                          size_t range_size) {
+    return range_size * sizeof(T) + alignof(T);
+  }
+};
+
+template <typename T, typename CompareT = std::less<>,
+          std::size_t ElementsPerWorkItem = 1>
+class group_sorter {
+  CompareT comp;
+  std::byte *scratch;
+  std::size_t scratch_size;
+
+public:
+  template <std::size_t Extent>
+  group_sorter(sycl::span<std::byte, Extent> scratch_,
+               CompareT comp_ = CompareT{})
+      : comp(comp_), scratch(scratch_.data()), scratch_size(scratch_.size()) {}
+
+  template <typename Group> T operator()(Group g, T val) {
+    (void)g;
+    (void)val;
+#ifdef __SYCL_DEVICE_ONLY__
+    auto range_size = g.get_local_range().size();
+    if (scratch_size >= memory_required(Group::fence_scope, range_size)) {
+      std::size_t local_id = g.get_local_linear_id();
+      T *temp = reinterpret_cast<T *>(scratch);
+      ::new (temp + local_id) T(val);
+      sycl::detail::merge_sort(g, temp, range_size, comp,
+                               scratch + range_size * sizeof(T));
+      val = temp[local_id];
+    }
+    return val;
+#else
+    throw sycl::exception(
+        std::error_code(PI_ERROR_INVALID_DEVICE, sycl::sycl_category()),
+        "default_sorter operator() is not supported on host device.");
+#endif
+  }
+
+  static constexpr std::size_t memory_required(sycl::memory_scope scope,
+                                               size_t range_size) {
+    return 2 * joint_sorter<>::template memory_required<T>(
+                   scope, range_size * ElementsPerWorkItem);
+  }
+};
+
+} // namespace default_sorters
+
 enum class sorting_order { ascending, descending };
 
 namespace detail {
@@ -125,6 +227,129 @@ template <typename T> struct ConvertToComp<T, sorting_order::descending> {
 };
 } // namespace detail
 
+// Radix sorters provided by the second version of the extension specification.
+namespace radix_sorters {
+
+template <typename ValT, sorting_order OrderT = sorting_order::ascending,
+          unsigned int BitsPerPass = 4>
+class joint_sorter {
+
+  std::byte *scratch = nullptr;
+  uint32_t first_bit = 0;
+  uint32_t last_bit = 0;
+  std::size_t scratch_size = 0;
+
+  static constexpr uint32_t bits = BitsPerPass;
+
+public:
+  template <std::size_t Extent>
+  joint_sorter(sycl::span<std::byte, Extent> scratch_,
+               const std::bitset<sizeof(ValT) * CHAR_BIT> mask =
+                   std::bitset<sizeof(ValT) * CHAR_BIT>(
+                       std::numeric_limits<unsigned long long>::max()))
+      : scratch(scratch_.data()), scratch_size(scratch_.size()) {
+    static_assert((std::is_arithmetic<ValT>::value ||
+                   std::is_same<ValT, sycl::half>::value ||
+                   std::is_same<ValT, sycl::ext::oneapi::bfloat16>::value),
+                  "radix sort is not supported for the given type");
+
+    first_bit = 0;
+    while (first_bit < mask.size() && !mask[first_bit])
+      ++first_bit;
+
+    last_bit = first_bit;
+    while (last_bit < mask.size() && mask[last_bit])
+      ++last_bit;
+  }
+
+  template <typename GroupT, typename PtrT>
+  void operator()(GroupT g, PtrT first, PtrT last) {
+    (void)g;
+    (void)first;
+    (void)last;
+#ifdef __SYCL_DEVICE_ONLY__
+    sycl::detail::privateDynamicSort</*is_key_value=*/false,
+                                     OrderT == sorting_order::ascending,
+                                     /*empty*/ 1, BitsPerPass>(
+        g, first, /*empty*/ first, (last - first) > 0 ? (last - first) : 0,
+        scratch, first_bit, last_bit);
+#else
+    throw sycl::exception(
+        std::error_code(PI_ERROR_INVALID_DEVICE, sycl::sycl_category()),
+        "radix_sorters::joint_sorter is not supported on host device.");
+#endif
+  }
+
+  static constexpr std::size_t memory_required(sycl::memory_scope scope,
+                                               std::size_t range_size) {
+    // Scope is not important so far
+    (void)scope;
+    return range_size * sizeof(ValT) +
+           (1 << bits) * range_size * sizeof(uint32_t) + alignof(uint32_t);
+  }
+};
+
+template <typename ValT, sorting_order OrderT = sorting_order::ascending,
+          size_t ElementsPerWorkItem = 1, unsigned int BitsPerPass = 4>
+class group_sorter {
+
+  std::byte *scratch = nullptr;
+  uint32_t first_bit = 0;
+  uint32_t last_bit = 0;
+  std::size_t scratch_size = 0;
+
+  static constexpr uint32_t bits = BitsPerPass;
+
+public:
+  template <std::size_t Extent>
+  group_sorter(sycl::span<std::byte, Extent> scratch_,
+               const std::bitset<sizeof(ValT) * CHAR_BIT> mask =
+                   std::bitset<sizeof(ValT) * CHAR_BIT>(
+                       std::numeric_limits<unsigned long long>::max()))
+      : scratch(scratch_.data()), scratch_size(scratch_.size()) {
+    static_assert((std::is_arithmetic<ValT>::value ||
+                   std::is_same<ValT, sycl::half>::value ||
+                   std::is_same<ValT, sycl::ext::oneapi::bfloat16>::value),
+                  "radix sort is not usable");
+
+    first_bit = 0;
+    while (first_bit < mask.size() && !mask[first_bit])
+      ++first_bit;
+
+    last_bit = first_bit;
+    while (last_bit < mask.size() && mask[last_bit])
+      ++last_bit;
+  }
+
+  template <typename GroupT> ValT operator()(GroupT g, ValT val) {
+    (void)g;
+    (void)val;
+#ifdef __SYCL_DEVICE_ONLY__
+    ValT result[]{val};
+    sycl::detail::privateStaticSort</*is_key_value=*/false,
+                                    /*is_blocked=*/true,
+                                    OrderT == sorting_order::ascending,
+                                    /*items_per_work_item=*/1, bits>(
+        g, result, /*empty*/ result, scratch, first_bit, last_bit);
+    return result[0];
+#else
+    throw sycl::exception(
+        std::error_code(PI_ERROR_INVALID_DEVICE, sycl::sycl_category()),
+        "radix_sorter is not supported on host device.");
+#endif
+  }
+
+  static constexpr size_t memory_required(sycl::memory_scope scope,
+                                          size_t range_size) {
+    (void)scope;
+    return std::max(range_size * sizeof(ValT),
+                    range_size * (1 << bits) * sizeof(uint32_t));
+  }
+};
+
+} // namespace radix_sorters
+
+// Radix sorter provided by the first version of the extension specification.
 template <typename ValT, sorting_order OrderT = sorting_order::ascending,
           unsigned int BitsPerPass = 4>
 class radix_sorter {
