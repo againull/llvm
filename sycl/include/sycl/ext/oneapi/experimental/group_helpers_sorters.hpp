@@ -143,26 +143,6 @@ public:
 #endif
   }
 
-  template <typename Group, typename T> T operator()(Group g, T val) {
-#ifdef __SYCL_DEVICE_ONLY__
-    auto range_size = g.get_local_range().size();
-    if (scratch_size >= memory_required<T>(Group::fence_scope, range_size)) {
-      size_t local_id = g.get_local_linear_id();
-      T *temp = reinterpret_cast<T *>(scratch);
-      ::new (temp + local_id) T(val);
-      sycl::detail::merge_sort(g, temp, range_size, comp,
-                               scratch + range_size * sizeof(T));
-      val = temp[local_id];
-    }
-#else
-    (void)g;
-    throw sycl::exception(
-        std::error_code(PI_ERROR_INVALID_DEVICE, sycl::sycl_category()),
-        "default_sorter operator() is not supported on host device.");
-#endif
-    return val;
-  }
-
   template <typename T>
   static constexpr size_t memory_required(sycl::memory_scope,
                                           size_t range_size) {
