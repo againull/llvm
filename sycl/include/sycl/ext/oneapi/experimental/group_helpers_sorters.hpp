@@ -127,14 +127,24 @@ public:
       : comp(comp_), scratch(scratch_.data()), scratch_size(scratch_.size()) {}
 
   template <typename Group, typename Ptr>
-  void operator()(Group g, Ptr first, Ptr last) {
-    (void)g;
-    (void)first;
-    (void)last;
+  void operator()([[maybe_unused]] Group g, [[maybe_unused]] Ptr first,
+                  [[maybe_unused]] Ptr last) {
 #ifdef __SYCL_DEVICE_ONLY__
     using T = typename sycl::detail::GetValueType<Ptr>::type;
-    if (scratch_size >= memory_required<T>(Group::fence_scope, last - first))
+    if (last <= first)
+      return;
+
+    auto mem_req = memory_required<T>(Group::fence_scope, last - first);
+    // Per extension specification if scratch size is less than the value
+    // returned by memory_required, behavior is undefined.
+    if (scratch_size >= mem_req) {
+      // Adjust the scratch pointer based on alignment of the type T.
+      void *aligned_scratch_ptr = scratch;
+      std::align(alignof(T), (last - first) * sizeof(T), aligned_scratch_ptr,
+                 /* space */ mem_req);
+      scratch = static_cast<std::byte *>(aligned_scratch_ptr);
       sycl::detail::merge_sort(g, first, last - first, comp, scratch);
+    }
 #else
     throw sycl::exception(
         std::error_code(PI_ERROR_INVALID_DEVICE, sycl::sycl_category()),
@@ -163,18 +173,25 @@ public:
                CompareT comp_ = CompareT{})
       : comp(comp_), scratch(scratch_.data()), scratch_size(scratch_.size()) {}
 
-  template <typename Group> T operator()(Group g, T val) {
-    (void)g;
-    (void)val;
+  template <typename Group>
+  T operator()([[maybe_unused]] Group g, [[maybe_unused]] T val) {
 #ifdef __SYCL_DEVICE_ONLY__
     auto range_size = g.get_local_range().size();
-    if (scratch_size >= memory_required(Group::fence_scope, range_size)) {
+    auto mem_req = memory_required(Group::fence_scope, range_size);
+    // Per extension specification if scratch size is less than the value
+    // returned by memory_required, behavior is undefined.
+    if (scratch_size >= mem_req) {
       std::size_t local_id = g.get_local_linear_id();
-      T *temp = reinterpret_cast<T *>(scratch);
-      ::new (temp + local_id) T(val);
-      sycl::detail::merge_sort(g, temp, range_size, comp,
-                               scratch + range_size * sizeof(T));
-      val = temp[local_id];
+      // Adjust the scratch pointer based on alignment of the type T.
+      void *aligned_scratch_ptr = scratch;
+      std::align(alignof(T), /* output storage and temporary storage */ 2 *
+                                 range_size * sizeof(T),
+                 aligned_scratch_ptr, /* space */ mem_req);
+      scratch = static_cast<std::byte *>(aligned_scratch_ptr);
+      T *local_copy = ::new (scratch + local_id * sizeof(T)) T(val);
+      sycl::detail::merge_sort(g, reinterpret_cast<T *>(scratch), range_size,
+                               comp, scratch + range_size * sizeof(T));
+      val = *local_copy;
     }
     return val;
 #else
@@ -220,13 +237,12 @@ class joint_sorter {
   std::size_t scratch_size = 0;
 
   static constexpr uint32_t bits = BitsPerPass;
+  using bitset_t = std::bitset<sizeof(ValT) * CHAR_BIT>;
 
 public:
   template <std::size_t Extent>
   joint_sorter(sycl::span<std::byte, Extent> scratch_,
-               const std::bitset<sizeof(ValT) * CHAR_BIT> mask =
-                   std::bitset<sizeof(ValT) * CHAR_BIT>(
-                       (std::numeric_limits<unsigned long long>::max)()))
+               const bitset_t mask = bitset_t{}.set())
       : scratch(scratch_.data()), scratch_size(scratch_.size()) {
     static_assert((std::is_arithmetic<ValT>::value ||
                    std::is_same<ValT, sycl::half>::value ||
@@ -234,25 +250,25 @@ public:
                   "radix sort is not supported for the given type");
 
     first_bit = 0;
-    while (first_bit < mask.size() && !mask[first_bit])
-      ++first_bit;
+    for (; first_bit < mask.size() && !mask[first_bit]; ++first_bit)
+      ;
 
     last_bit = first_bit;
-    while (last_bit < mask.size() && mask[last_bit])
-      ++last_bit;
+    for (; last_bit < mask.size() && mask[last_bit]; ++last_bit)
+      ;
   }
 
   template <typename GroupT, typename PtrT>
-  void operator()(GroupT g, PtrT first, PtrT last) {
-    (void)g;
-    (void)first;
-    (void)last;
+  void operator()([[maybe_unused]] GroupT g, [[maybe_unused]] PtrT first,
+                  [[maybe_unused]] PtrT last) {
 #ifdef __SYCL_DEVICE_ONLY__
+    if (last <= first)
+      return;
+
     sycl::detail::privateDynamicSort</*is_key_value=*/false,
                                      OrderT == sorting_order::ascending,
                                      /*empty*/ 1, BitsPerPass>(
-        g, first, /*empty*/ first, (last - first) > 0 ? (last - first) : 0,
-        scratch, first_bit, last_bit);
+        g, first, /*empty*/ first, last - first, scratch, first_bit, last_bit);
 #else
     throw sycl::exception(
         std::error_code(PI_ERROR_INVALID_DEVICE, sycl::sycl_category()),
@@ -279,13 +295,12 @@ class group_sorter {
   std::size_t scratch_size = 0;
 
   static constexpr uint32_t bits = BitsPerPass;
+  using bitset_t = std::bitset<sizeof(ValT) * CHAR_BIT>;
 
 public:
   template <std::size_t Extent>
   group_sorter(sycl::span<std::byte, Extent> scratch_,
-               const std::bitset<sizeof(ValT) * CHAR_BIT> mask =
-                   std::bitset<sizeof(ValT) * CHAR_BIT>(
-                       (std::numeric_limits<unsigned long long>::max)()))
+               const bitset_t mask = bitset_t{}.set())
       : scratch(scratch_.data()), scratch_size(scratch_.size()) {
     static_assert((std::is_arithmetic<ValT>::value ||
                    std::is_same<ValT, sycl::half>::value ||
@@ -301,9 +316,8 @@ public:
       ++last_bit;
   }
 
-  template <typename GroupT> ValT operator()(GroupT g, ValT val) {
-    (void)g;
-    (void)val;
+  template <typename GroupT>
+  ValT operator()([[maybe_unused]] GroupT g, [[maybe_unused]] ValT val) {
 #ifdef __SYCL_DEVICE_ONLY__
     ValT result[]{val};
     sycl::detail::privateStaticSort</*is_key_value=*/false,
@@ -319,9 +333,9 @@ public:
 #endif
   }
 
-  static constexpr size_t memory_required(sycl::memory_scope scope,
-                                          size_t range_size) {
-    (void)scope;
+  static constexpr size_t
+  memory_required([[maybe_unused]] sycl::memory_scope scope,
+                  size_t range_size) {
     return (std::max)(range_size * sizeof(ValT),
                       range_size * (1 << bits) * sizeof(uint32_t));
   }
