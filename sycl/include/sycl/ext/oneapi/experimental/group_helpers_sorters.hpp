@@ -249,12 +249,11 @@ public:
                    std::is_same<ValT, sycl::ext::oneapi::bfloat16>::value),
                   "radix sort is not supported for the given type");
 
-    first_bit = 0;
-    for (; first_bit < mask.size() && !mask[first_bit]; ++first_bit)
+    for (first_bit = 0; first_bit < mask.size() && !mask[first_bit];
+         ++first_bit)
       ;
-
-    last_bit = first_bit;
-    for (; last_bit < mask.size() && mask[last_bit]; ++last_bit)
+    for (last_bit = first_bit; last_bit < mask.size() && mask[last_bit];
+         ++last_bit)
       ;
   }
 
@@ -307,13 +306,12 @@ public:
                    std::is_same<ValT, sycl::ext::oneapi::bfloat16>::value),
                   "radix sort is not usable");
 
-    first_bit = 0;
-    while (first_bit < mask.size() && !mask[first_bit])
-      ++first_bit;
-
-    last_bit = first_bit;
-    while (last_bit < mask.size() && mask[last_bit])
-      ++last_bit;
+    for (first_bit = 0; first_bit < mask.size() && !mask[first_bit];
+         ++first_bit)
+      ;
+    for (last_bit = first_bit; last_bit < mask.size() && mask[last_bit];
+         ++last_bit)
+      ;
   }
 
   template <typename GroupT>
