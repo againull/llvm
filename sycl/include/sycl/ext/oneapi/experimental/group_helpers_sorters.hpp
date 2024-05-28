@@ -187,7 +187,7 @@ public:
                                  range_size * sizeof(T),
                  scratch_ptr, /* space */ mem_req);
       auto aligned_scratch_ptr = static_cast<std::byte *>(scratch_ptr);
-      T *local_copy = ::new (scratch.data() + local_id * sizeof(T)) T(val);
+      T *local_copy = ::new (aligned_scratch_ptr + local_id * sizeof(T)) T(val);
       sycl::detail::merge_sort(g, reinterpret_cast<T *>(aligned_scratch_ptr),
                                range_size, comp,
                                aligned_scratch_ptr + range_size * sizeof(T));
@@ -275,10 +275,9 @@ public:
 #endif
   }
 
-  static constexpr std::size_t memory_required(sycl::memory_scope scope,
-                                               std::size_t range_size) {
-    // Scope is not important so far
-    (void)scope;
+  static constexpr std::size_t
+  memory_required([[maybe_unused]] sycl::memory_scope scope,
+                  std::size_t range_size) {
     return range_size * sizeof(ValT) +
            (1 << bits) * range_size * sizeof(uint32_t) + alignof(uint32_t);
   }
