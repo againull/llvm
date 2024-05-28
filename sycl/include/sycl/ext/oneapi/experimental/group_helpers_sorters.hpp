@@ -117,14 +117,13 @@ namespace default_sorters {
 
 template <typename CompareT = std::less<>> class joint_sorter {
   CompareT comp;
-  std::byte *scratch;
-  size_t scratch_size;
+  sycl::span<std::byte> scratch;
 
 public:
   template <size_t Extent>
   joint_sorter(sycl::span<std::byte, Extent> scratch_,
                CompareT comp_ = CompareT())
-      : comp(comp_), scratch(scratch_.data()), scratch_size(scratch_.size()) {}
+      : comp(comp_), scratch(scratch_) {}
 
   template <typename Group, typename Ptr>
   void operator()([[maybe_unused]] Group g, [[maybe_unused]] Ptr first,
@@ -137,13 +136,14 @@ public:
     auto mem_req = memory_required<T>(Group::fence_scope, last - first);
     // Per extension specification if scratch size is less than the value
     // returned by memory_required, behavior is undefined.
-    if (scratch_size >= mem_req) {
+    if (scratch.size() >= mem_req) {
       // Adjust the scratch pointer based on alignment of the type T.
-      void *aligned_scratch_ptr = scratch;
-      std::align(alignof(T), (last - first) * sizeof(T), aligned_scratch_ptr,
+      void *scratch_ptr = scratch.data();
+      std::align(alignof(T), (last - first) * sizeof(T), scratch_ptr,
                  /* space */ mem_req);
-      scratch = static_cast<std::byte *>(aligned_scratch_ptr);
-      sycl::detail::merge_sort(g, first, last - first, comp, scratch);
+      auto aligned_scratch_ptr = static_cast<std::byte *>(scratch_ptr);
+      sycl::detail::merge_sort(g, first, last - first, comp,
+                               aligned_scratch_ptr);
     }
 #else
     throw sycl::exception(
@@ -164,14 +164,13 @@ template <typename T, typename CompareT = std::less<>,
           std::size_t ElementsPerWorkItem = 1>
 class group_sorter {
   CompareT comp;
-  std::byte *scratch;
-  std::size_t scratch_size;
+  sycl::span<std::byte> scratch;
 
 public:
   template <std::size_t Extent>
   group_sorter(sycl::span<std::byte, Extent> scratch_,
                CompareT comp_ = CompareT{})
-      : comp(comp_), scratch(scratch_.data()), scratch_size(scratch_.size()) {}
+      : comp(comp_), scratch(scratch_) {}
 
   template <typename Group>
   T operator()([[maybe_unused]] Group g, [[maybe_unused]] T val) {
@@ -180,17 +179,18 @@ public:
     auto mem_req = memory_required(Group::fence_scope, range_size);
     // Per extension specification if scratch size is less than the value
     // returned by memory_required, behavior is undefined.
-    if (scratch_size >= mem_req) {
+    if (scratch.size() >= mem_req) {
       std::size_t local_id = g.get_local_linear_id();
       // Adjust the scratch pointer based on alignment of the type T.
-      void *aligned_scratch_ptr = scratch;
+      void *scratch_ptr = scratch.data();
       std::align(alignof(T), /* output storage and temporary storage */ 2 *
                                  range_size * sizeof(T),
-                 aligned_scratch_ptr, /* space */ mem_req);
-      scratch = static_cast<std::byte *>(aligned_scratch_ptr);
-      T *local_copy = ::new (scratch + local_id * sizeof(T)) T(val);
-      sycl::detail::merge_sort(g, reinterpret_cast<T *>(scratch), range_size,
-                               comp, scratch + range_size * sizeof(T));
+                 scratch_ptr, /* space */ mem_req);
+      auto aligned_scratch_ptr = static_cast<std::byte *>(scratch_ptr);
+      T *local_copy = ::new (scratch.data() + local_id * sizeof(T)) T(val);
+      sycl::detail::merge_sort(g, reinterpret_cast<T *>(aligned_scratch_ptr),
+                               range_size, comp,
+                               aligned_scratch_ptr + range_size * sizeof(T));
       val = *local_copy;
     }
     return val;
@@ -231,10 +231,9 @@ template <typename ValT, sorting_order OrderT = sorting_order::ascending,
           unsigned int BitsPerPass = 4>
 class joint_sorter {
 
-  std::byte *scratch = nullptr;
+  sycl::span<std::byte> scratch;
   uint32_t first_bit = 0;
   uint32_t last_bit = 0;
-  std::size_t scratch_size = 0;
 
   static constexpr uint32_t bits = BitsPerPass;
   using bitset_t = std::bitset<sizeof(ValT) * CHAR_BIT>;
@@ -243,7 +242,7 @@ public:
   template <std::size_t Extent>
   joint_sorter(sycl::span<std::byte, Extent> scratch_,
                const bitset_t mask = bitset_t{}.set())
-      : scratch(scratch_.data()), scratch_size(scratch_.size()) {
+      : scratch(scratch_) {
     static_assert((std::is_arithmetic<ValT>::value ||
                    std::is_same<ValT, sycl::half>::value ||
                    std::is_same<ValT, sycl::ext::oneapi::bfloat16>::value),
@@ -267,7 +266,8 @@ public:
     sycl::detail::privateDynamicSort</*is_key_value=*/false,
                                      OrderT == sorting_order::ascending,
                                      /*empty*/ 1, BitsPerPass>(
-        g, first, /*empty*/ first, last - first, scratch, first_bit, last_bit);
+        g, first, /*empty*/ first, last - first, scratch.data(), first_bit,
+        last_bit);
 #else
     throw sycl::exception(
         std::error_code(PI_ERROR_INVALID_DEVICE, sycl::sycl_category()),
@@ -288,10 +288,9 @@ template <typename ValT, sorting_order OrderT = sorting_order::ascending,
           size_t ElementsPerWorkItem = 1, unsigned int BitsPerPass = 4>
 class group_sorter {
 
-  std::byte *scratch = nullptr;
+  sycl::span<std::byte> scratch;
   uint32_t first_bit = 0;
   uint32_t last_bit = 0;
-  std::size_t scratch_size = 0;
 
   static constexpr uint32_t bits = BitsPerPass;
   using bitset_t = std::bitset<sizeof(ValT) * CHAR_BIT>;
@@ -300,7 +299,7 @@ public:
   template <std::size_t Extent>
   group_sorter(sycl::span<std::byte, Extent> scratch_,
                const bitset_t mask = bitset_t{}.set())
-      : scratch(scratch_.data()), scratch_size(scratch_.size()) {
+      : scratch(scratch_) {
     static_assert((std::is_arithmetic<ValT>::value ||
                    std::is_same<ValT, sycl::half>::value ||
                    std::is_same<ValT, sycl::ext::oneapi::bfloat16>::value),
@@ -322,7 +321,7 @@ public:
                                     /*is_blocked=*/true,
                                     OrderT == sorting_order::ascending,
                                     /*items_per_work_item=*/1, bits>(
-        g, result, /*empty*/ result, scratch, first_bit, last_bit);
+        g, result, /*empty*/ result, scratch.data(), first_bit, last_bit);
     return result[0];
 #else
     throw sycl::exception(
