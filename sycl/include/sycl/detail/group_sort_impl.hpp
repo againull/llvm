@@ -20,13 +20,91 @@ namespace sycl {
 inline namespace _V1 {
 namespace detail {
 
+// Wrapper class for scratchpad memory used by the group-sorting
+// implementations. It simplifies accessing the supplied memory as arbitrary
+// types without breaking strict aliasing and avoiding alignment issues.
+struct ScratchMemory {
+public:
+  // "Reference" object for accessing part of the scratch memory as a type T.
+  template <typename T> struct ReferenceObj {
+  public:
+    ReferenceObj() : MPtr{nullptr} {};
+
+    operator T() const {
+      T value{0};
+      detail::memcpy(&value, MPtr, sizeof(T));
+      return value;
+    }
+
+    T operator++(int) noexcept {
+      T value{0};
+      detail::memcpy(&value, MPtr, sizeof(T));
+      T value_before = value++;
+      detail::memcpy(MPtr, &value, sizeof(T));
+      return value_before;
+    }
+
+    T operator++() noexcept {
+      T value{0};
+      detail::memcpy(&value, MPtr, sizeof(T));
+      ++value;
+      detail::memcpy(MPtr, &value, sizeof(T));
+      return value;
+    }
+
+    ReferenceObj &operator=(const T &value) noexcept {
+      detail::memcpy(MPtr, &value, sizeof(T));
+      return *this;
+    }
+
+    ReferenceObj &operator=(const ReferenceObj &value) noexcept {
+      MPtr = value.MPtr;
+      return *this;
+    }
+
+    ReferenceObj &operator=(ReferenceObj &&value) noexcept {
+      MPtr = std::move(value.MPtr);
+      return *this;
+    }
+
+    void copy(const ReferenceObj &value) noexcept {
+      detail::memcpy(MPtr, value.MPtr, sizeof(T));
+    }
+
+  private:
+    ReferenceObj(std::byte *ptr) : MPtr{ptr} {}
+
+    friend struct ScratchMemory;
+
+    std::byte *MPtr;
+  };
+
+  ScratchMemory operator+(size_t byte_offset) const noexcept {
+    return {MMemory + byte_offset};
+  }
+
+  ScratchMemory(std::byte *memory) : MMemory{memory} {}
+
+  ScratchMemory(const ScratchMemory &) = default;
+  ScratchMemory(ScratchMemory &&) = default;
+  ScratchMemory &operator=(const ScratchMemory &) = default;
+  ScratchMemory &operator=(ScratchMemory &&) = default;
+
+  template <typename ValueT>
+  ReferenceObj<ValueT> get(size_t index) const noexcept {
+    return {MMemory + index * sizeof(ValueT)};
+  }
+
+  std::byte *MMemory;
+};
+
 // ---- merge sort implementation
 
 // following two functions could be useless if std::[lower|upper]_bound worked
 // well
-template <typename Acc, typename Value, typename Compare>
-size_t lower_bound(Acc acc, size_t first, size_t last, const Value &value,
-                   Compare comp) {
+template <typename T, typename Compare>
+size_t lower_bound(const ScratchMemory &acc, size_t first, size_t last,
+                   const T &value, Compare comp) {
   size_t n = last - first;
   size_t cur = n;
   size_t it;
@@ -34,7 +112,7 @@ size_t lower_bound(Acc acc, size_t first, size_t last, const Value &value,
     it = first;
     cur = n / 2;
     it += cur;
-    if (comp(acc[it], value)) {
+    if (comp(static_cast<T>(acc.get<T>(it)), value)) {
       n -= cur + 1, first = ++it;
     } else
       n = cur;
@@ -42,15 +120,23 @@ size_t lower_bound(Acc acc, size_t first, size_t last, const Value &value,
   return first;
 }
 
-template <typename Acc, typename Value, typename Compare>
-size_t upper_bound(Acc acc, const size_t first, const size_t last,
-                   const Value &value, Compare comp) {
+template <typename T, typename Compare>
+size_t upper_bound(const ScratchMemory &acc, const size_t first,
+                   const size_t last, const T &value, Compare comp) {
   return detail::lower_bound(acc, first, last, value,
                              [comp](auto x, auto y) { return !comp(y, x); });
 }
 
 // swap for all data types including tuple-like types
 template <typename T> void swap_tuples(T &a, T &b) { std::swap(a, b); }
+
+template <typename T>
+void swap_tuples(ScratchMemory::ReferenceObj<T> &&a,
+                 ScratchMemory::ReferenceObj<T> &&b) {
+  T temp = a;
+  a.copy(b);
+  b = temp;
+}
 
 template <template <typename...> class TupleLike, typename T1, typename T2>
 void swap_tuples(TupleLike<T1, T2> &&a, TupleLike<T1, T2> &&b) {
@@ -68,22 +154,17 @@ struct GetValueType<sycl::multi_ptr<ElementType, Space, IsDecorated>> {
   using type = ElementType;
 };
 
-// since we couldn't assign data to raw memory, it's better to use placement
-// for first assignment
-template <typename Acc, typename T>
-void set_value(Acc ptr, const size_t idx, const T &val, bool is_first) {
-  if (is_first) {
-    ::new (ptr + idx) T(val);
-  } else {
-    ptr[idx] = val;
-  }
+template <typename T>
+void set_value(const ScratchMemory &ptr, const size_t idx, const T &val,
+               bool is_first) {
+  ptr.get<T>(idx) = val;
 }
 
-template <typename InAcc, typename OutAcc, typename Compare>
-void merge(const size_t offset, InAcc &in_acc1, OutAcc &out_acc1,
-           const size_t start_1, const size_t end_1, const size_t end_2,
-           const size_t start_out, Compare comp, const size_t chunk,
-           bool is_first) {
+template <typename T, typename Compare>
+void merge(const size_t offset, const ScratchMemory &in_acc1,
+           const ScratchMemory &out_acc1, const size_t start_1,
+           const size_t end_1, const size_t end_2, const size_t start_out,
+           Compare comp, const size_t chunk, bool is_first) {
   const size_t start_2 = end_1;
   // Borders of the sequences to merge within this call
   const size_t local_start_1 =
@@ -105,7 +186,7 @@ void merge(const size_t offset, InAcc &in_acc1, OutAcc &out_acc1,
   if (local_start_1 < local_end_1) {
     // Reduce the range for searching within the 2nd sequence and handle bound
     // items find left border in 2nd sequence
-    const auto local_l_item_1 = in_acc1[local_start_1];
+    const T local_l_item_1 = in_acc1.get<T>(local_start_1);
     size_t l_search_bound_2 =
         detail::lower_bound(in_acc1, start_2, end_2, local_l_item_1, comp);
     const size_t l_shift_1 = local_start_1 - start_1;
@@ -117,7 +198,7 @@ void merge(const size_t offset, InAcc &in_acc1, OutAcc &out_acc1,
     size_t r_search_bound_2{};
     // find right border in 2nd sequence
     if (local_size_1 > 1) {
-      const auto local_r_item_1 = in_acc1[local_end_1 - 1];
+      const T local_r_item_1 = in_acc1.get<T>(local_end_1 - 1);
       r_search_bound_2 = detail::lower_bound(in_acc1, l_search_bound_2, end_2,
                                              local_r_item_1, comp);
       const auto r_shift_1 = local_end_1 - 1 - start_1;
@@ -129,7 +210,7 @@ void merge(const size_t offset, InAcc &in_acc1, OutAcc &out_acc1,
 
     // Handle intermediate items
     for (size_t idx = local_start_1 + 1; idx < local_end_1 - 1; ++idx) {
-      const auto intermediate_item_1 = in_acc1[idx];
+      const T intermediate_item_1 = in_acc1.get<T>(idx);
       // we shouldn't seek in whole 2nd sequence. Just for the part where the
       // 1st sequence should be
       l_search_bound_2 =
@@ -146,7 +227,7 @@ void merge(const size_t offset, InAcc &in_acc1, OutAcc &out_acc1,
   if (local_start_2 < local_end_2) {
     // Reduce the range for searching within the 1st sequence and handle bound
     // items find left border in 1st sequence
-    const auto local_l_item_2 = in_acc1[local_start_2];
+    const T local_l_item_2 = in_acc1.get<T>(local_start_2);
     size_t l_search_bound_1 =
         detail::upper_bound(in_acc1, start_1, end_1, local_l_item_2, comp);
     const size_t l_shift_1 = l_search_bound_1 - start_1;
@@ -158,7 +239,7 @@ void merge(const size_t offset, InAcc &in_acc1, OutAcc &out_acc1,
     size_t r_search_bound_1{};
     // find right border in 1st sequence
     if (local_size_2 > 1) {
-      const auto local_r_item_2 = in_acc1[local_end_2 - 1];
+      const T local_r_item_2 = in_acc1.get<T>(local_end_2 - 1);
       r_search_bound_1 = detail::upper_bound(in_acc1, l_search_bound_1, end_1,
                                              local_r_item_2, comp);
       const size_t r_shift_1 = r_search_bound_1 - start_1;
@@ -170,7 +251,7 @@ void merge(const size_t offset, InAcc &in_acc1, OutAcc &out_acc1,
 
     // Handle intermediate items
     for (auto idx = local_start_2 + 1; idx < local_end_2 - 1; ++idx) {
-      const auto intermediate_item_2 = in_acc1[idx];
+      const T intermediate_item_2 = in_acc1.get<T>(idx);
       // we shouldn't seek in whole 1st sequence. Just for the part where the
       // 2nd sequence should be
       l_search_bound_1 =
@@ -185,15 +266,16 @@ void merge(const size_t offset, InAcc &in_acc1, OutAcc &out_acc1,
   }
 }
 
-template <typename Iter, typename Compare>
-void bubble_sort(Iter first, const size_t begin, const size_t end,
-                 Compare comp) {
+template <typename T, typename Compare>
+void bubble_sort(const ScratchMemory &first, const size_t begin,
+                 const size_t end, Compare comp) {
   if (begin < end) {
     for (size_t i = begin; i < end; ++i) {
       // Handle intermediate items
       for (size_t idx = i + 1; idx < end; ++idx) {
-        if (comp(first[idx], first[i])) {
-          detail::swap_tuples(first[i], first[idx]);
+        if (comp(static_cast<T>(first.get<T>(idx)),
+                 static_cast<T>(first.get<T>(i)))) {
+          detail::swap_tuples(first.get<T>(i), first.get<T>(idx));
         }
       }
     }
@@ -201,18 +283,21 @@ void bubble_sort(Iter first, const size_t begin, const size_t end,
 }
 
 template <typename Group, typename Iter, typename Compare>
-void merge_sort(Group group, Iter first, const size_t n, Compare comp,
+void merge_sort(Group group, Iter input, const size_t n, Compare comp,
                 std::byte *scratch) {
   using T = typename GetValueType<Iter>::type;
   const size_t idx = group.get_local_linear_id();
   const size_t local = group.get_local_range().size();
   const size_t chunk = (n - 1) / local + 1;
 
+  ScratchMemory first{reinterpret_cast<std::byte *>(input)};
+
   // we need to sort within work item first
-  bubble_sort(first, idx * chunk, sycl::min((idx + 1) * chunk, n), comp);
+  bubble_sort<T, Compare>(first, idx * chunk, sycl::min((idx + 1) * chunk, n),
+                          comp);
   sycl::group_barrier(group);
 
-  T *temp = reinterpret_cast<T *>(scratch);
+  ScratchMemory temp(scratch);
   bool data_in_temp = false;
   bool is_first = true;
   size_t sorted_size = 1;
@@ -224,11 +309,12 @@ void merge_sort(Group group, Iter first, const size_t n, Compare comp,
     const size_t offset = chunk * (idx % sorted_size);
 
     if (!data_in_temp) {
-      merge(offset, first, temp, start_1, end_1, end_2, start_1, comp, chunk,
-            is_first);
+      merge<T, Compare>(offset, first, temp, start_1, end_1, end_2, start_1,
+                        comp, chunk, is_first);
     } else {
-      merge(offset, temp, first, start_1, end_1, end_2, start_1, comp, chunk,
-            /*is_first*/ false);
+      merge<T, Compare>(offset, temp, first, start_1, end_1, end_2, start_1,
+                        comp, chunk,
+                        /*is_first*/ false);
     }
     sycl::group_barrier(group);
 
@@ -242,7 +328,7 @@ void merge_sort(Group group, Iter first, const size_t n, Compare comp,
   if (data_in_temp) {
     for (size_t i = 0; i < chunk; ++i) {
       if (idx * chunk + i < n) {
-        first[idx * chunk + i] = temp[idx * chunk + i];
+        first.get<T>(idx * chunk + i).copy(temp.get<T>(idx * chunk + i));
       }
     }
     sycl::group_barrier(group);
@@ -435,84 +521,6 @@ template <> struct ValuesAssigner<false> {
 
   template <typename IterOutT, typename ValT>
   void operator()(IterOutT, size_t, ValT) {}
-};
-
-// Wrapper class for scratchpad memory used by the group-sorting
-// implementations. It simplifies accessing the supplied memory as arbitrary
-// types without breaking strict aliasing and avoiding alignment issues.
-struct ScratchMemory {
-public:
-  // "Reference" object for accessing part of the scratch memory as a type T.
-  template <typename T> struct ReferenceObj {
-  public:
-    ReferenceObj() : MPtr{nullptr} {};
-
-    operator T() const {
-      T value{0};
-      detail::memcpy(&value, MPtr, sizeof(T));
-      return value;
-    }
-
-    T operator++(int) noexcept {
-      T value{0};
-      detail::memcpy(&value, MPtr, sizeof(T));
-      T value_before = value++;
-      detail::memcpy(MPtr, &value, sizeof(T));
-      return value_before;
-    }
-
-    T operator++() noexcept {
-      T value{0};
-      detail::memcpy(&value, MPtr, sizeof(T));
-      ++value;
-      detail::memcpy(MPtr, &value, sizeof(T));
-      return value;
-    }
-
-    ReferenceObj &operator=(const T &value) noexcept {
-      detail::memcpy(MPtr, &value, sizeof(T));
-      return *this;
-    }
-
-    ReferenceObj &operator=(const ReferenceObj &value) noexcept {
-      MPtr = value.MPtr;
-      return *this;
-    }
-
-    ReferenceObj &operator=(ReferenceObj &&value) noexcept {
-      MPtr = std::move(value.MPtr);
-      return *this;
-    }
-
-    void copy(const ReferenceObj &value) noexcept {
-      detail::memcpy(MPtr, value.MPtr, sizeof(T));
-    }
-
-  private:
-    ReferenceObj(std::byte *ptr) : MPtr{ptr} {}
-
-    friend struct ScratchMemory;
-
-    std::byte *MPtr;
-  };
-
-  ScratchMemory operator+(size_t byte_offset) const noexcept {
-    return {MMemory + byte_offset};
-  }
-
-  ScratchMemory(std::byte *memory) : MMemory{memory} {}
-
-  ScratchMemory(const ScratchMemory &) = default;
-  ScratchMemory(ScratchMemory &&) = default;
-  ScratchMemory &operator=(const ScratchMemory &) = default;
-  ScratchMemory &operator=(ScratchMemory &&) = default;
-
-  template <typename ValueT>
-  ReferenceObj<ValueT> get(size_t index) const noexcept {
-    return {MMemory + index * sizeof(ValueT)};
-  }
-
-  std::byte *MMemory;
 };
 
 // The iteration of radix sort for unknown number of elements per work item
