@@ -130,21 +130,35 @@ public:
                   [[maybe_unused]] Ptr last) {
 #ifdef __SYCL_DEVICE_ONLY__
     using T = typename sycl::detail::GetValueType<Ptr>::type;
+    static_assert(
+        !(sizeof(T) % alignof(T)),
+        "Size of the element type must be a multiple of the alignment!");
     if (last <= first)
       return;
 
-    auto mem_req = memory_required<T>(Group::fence_scope, last - first);
-    // Per extension specification if scratch size is less than the value
-    // returned by memory_required, behavior is undefined.
-    if (scratch.size() >= mem_req) {
-      // Adjust the scratch pointer based on alignment of the type T.
-      void *scratch_ptr = scratch.data();
-      std::align(alignof(T), (last - first) * sizeof(T), scratch_ptr,
-                 /* space */ mem_req);
-      auto aligned_scratch_ptr = static_cast<std::byte *>(scratch_ptr);
-      sycl::detail::merge_sort(g, first, last - first, comp,
-                               aligned_scratch_ptr);
+    // Adjust the scratch pointer based on alignment of the type T.
+    void *scratch_ptr = scratch.data();
+    size_t space = scratch.size();
+    const size_t n = last - first;
+    if (!std::align(alignof(T), n * sizeof(T), scratch_ptr, space)) {
+      return;
     }
+    auto aligned_scratch_ptr = static_cast<std::byte *>(scratch_ptr);
+
+    const size_t idx = g.get_local_linear_id();
+    const size_t local = g.get_local_range().size();
+    const size_t chunk = (n - 1) / local + 1;
+    T *local_copy;
+    for (int i = chunk; i >= 0; --i) {
+      auto index = idx * chunk + i;
+      if (index < n) {
+        local_copy =
+            ::new (aligned_scratch_ptr + index * sizeof(T)) T(first[index]);
+      }
+    }
+    T *scratch_begin = sycl::group_broadcast(g, local_copy);
+
+    sycl::detail::merge_sort(g, first, n, comp, scratch_begin);
 #else
     throw sycl::exception(
         std::error_code(PI_ERROR_INVALID_DEVICE, sycl::sycl_category()),
@@ -175,24 +189,35 @@ public:
   template <typename Group>
   T operator()([[maybe_unused]] Group g, [[maybe_unused]] T val) {
 #ifdef __SYCL_DEVICE_ONLY__
+    static_assert(
+        !(sizeof(T) % alignof(T)),
+        "Size of the element type must be a multiple of the alignment!");
     auto range_size = g.get_local_range().size();
-    auto mem_req = memory_required(Group::fence_scope, range_size);
+    std::size_t local_id = g.get_local_linear_id();
+
+    // Adjust the scratch pointer based on alignment of the type T.
     // Per extension specification if scratch size is less than the value
-    // returned by memory_required, behavior is undefined.
-    if (scratch.size() >= mem_req) {
-      std::size_t local_id = g.get_local_linear_id();
-      // Adjust the scratch pointer based on alignment of the type T.
-      void *scratch_ptr = scratch.data();
-      std::align(alignof(T), /* output storage and temporary storage */ 2 *
-                                 range_size * sizeof(T),
-                 scratch_ptr, /* space */ mem_req);
-      auto aligned_scratch_ptr = static_cast<std::byte *>(scratch_ptr);
-      T *local_copy = ::new (aligned_scratch_ptr + local_id * sizeof(T)) T(val);
-      sycl::detail::merge_sort(g, reinterpret_cast<T *>(aligned_scratch_ptr),
-                               range_size, comp,
-                               aligned_scratch_ptr + range_size * sizeof(T));
-      val = *local_copy;
+    // returned by memory_required, behavior is undefined. So, if std::align
+    // returns nullptr (which means that we don't have enough space) then exit
+    // early.
+    void *scratch_ptr = scratch.data();
+    size_t space = scratch.size();
+    if (!std::align(alignof(T), /* output storage and temporary storage */ 2 *
+                                    range_size * sizeof(T),
+                    scratch_ptr, space)) {
+      return val;
     }
+
+    auto aligned_scratch_ptr = static_cast<std::byte *>(scratch_ptr);
+    T *local_copy = ::new (aligned_scratch_ptr + local_id * sizeof(T)) T(val);
+    ::new (aligned_scratch_ptr + range_size * sizeof(T) + local_id * sizeof(T))
+        T(val);
+    // Broadcast leader's pointer (the beginning of the scratch) to all work
+    // items in the group.
+    T *scratch_begin = sycl::group_broadcast(g, local_copy);
+    sycl::detail::merge_sort(g, scratch_begin, range_size, comp,
+                             scratch_begin + range_size);
+    val = *local_copy;
     return val;
 #else
     throw sycl::exception(
