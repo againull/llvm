@@ -68,17 +68,27 @@ public:
     // returned by memory_required then behavior is undefined, so we don't check
     // that the scratch size statisfies the requirement.
     using T = typename sycl::detail::GetValueType<Ptr>::type;
-    T *scratch_begin = nullptr;
     size_t n = last - first;
-    if (g.leader()) {
-      void *scratch_ptr = scratch.data();
-      size_t space = scratch.size();
-      scratch_ptr = std::align(alignof(T), n * sizeof(T), scratch_ptr, space);
-      scratch_begin = ::new (scratch_ptr) T[n];
+    void *scratch_ptr = scratch.data();
+    size_t space = scratch.size();
+    scratch_ptr = std::align(alignof(T), n * sizeof(T), scratch_ptr, space);
+    std::byte *aligned_scratch_ptr = static_cast<std::byte *>(scratch_ptr);
+    const size_t idx = g.get_local_linear_id();
+    const size_t local = g.get_local_range().size();
+    T *local_copy = nullptr;
+    // Each work item constructs several elements based on the input size.
+    // Remember pointer to the beginning of the chunk in local_copy.
+    const size_t chunk = (n - 1) / local + 1;
+    for (int i = chunk; i >= 0; --i) {
+      auto index = idx * chunk + i;
+      if (index < n) {
+        local_copy =
+            ::new (aligned_scratch_ptr + index * sizeof(T)) T(first[index]);
+      }
     }
     // Broadcast leader's pointer (the beginning of the scratch) to all work
     // items in the group.
-    scratch_begin = sycl::group_broadcast(g, scratch_begin);
+    T *scratch_begin = sycl::group_broadcast(g, local_copy);
     sycl::detail::merge_sort(g, first, n, comp, scratch_begin);
 #else
     throw sycl::exception(
@@ -94,25 +104,26 @@ public:
     // Per extension specification if scratch size is less than the value
     // returned by memory_required then behavior is undefined, so we don't check
     // that the scratch size statisfies the requirement.
-    T *scratch_begin = nullptr;
-    std::size_t local_id = g.get_local_linear_id();
-    auto range_size = g.get_local_range().size();
-    if (g.leader()) {
-      void *scratch_ptr = scratch.data();
-      size_t space = scratch.size();
-      scratch_ptr =
-          std::align(alignof(T), /* output storage and temporary storage */ 2 *
-                                     range_size * sizeof(T),
-                     scratch_ptr, space);
-      scratch_begin = ::new (scratch_ptr) T[2 * range_size];
-    }
+    void *scratch_ptr = scratch.data();
+    size_t space = scratch.size();
+    const size_t range_size = g.get_local_range().size();
+    const size_t local_id = g.get_local_linear_id();
+    scratch_ptr =
+        std::align(alignof(T), /* output storage and temporary storage */ 2 *
+                                   range_size * sizeof(T),
+                   scratch_ptr, space);
+    std::byte *aligned_scratch_ptr = static_cast<std::byte *>(scratch_ptr);
+    // Each work item processes two locations: in the output buffer and in the
+    // temp buffer.
+    T *local_copy = ::new (aligned_scratch_ptr + local_id * sizeof(T)) T(val);
+    ::new (aligned_scratch_ptr + range_size * sizeof(T) + local_id * sizeof(T))
+        T(val);
     // Broadcast leader's pointer (the beginning of the scratch) to all work
     // items in the group.
-    scratch_begin = sycl::group_broadcast(g, scratch_begin);
-    scratch_begin[local_id] = val;
+    T *scratch_begin = sycl::group_broadcast(g, local_copy);
     sycl::detail::merge_sort(g, scratch_begin, range_size, comp,
                              scratch_begin + range_size);
-    val = scratch_begin[local_id];
+    val = *local_copy;
 #else
     throw sycl::exception(
         std::error_code(PI_ERROR_INVALID_DEVICE, sycl::sycl_category()),
