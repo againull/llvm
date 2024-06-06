@@ -89,7 +89,7 @@ public:
     // Broadcast leader's pointer (the beginning of the scratch) to all work
     // items in the group.
     T *scratch_begin = sycl::group_broadcast(g, local_copy);
-    sycl::detail::merge_sort(g, first, n, comp, scratch_begin);
+    sycl::detail::merge_sort(g, first, n, comp, sycl::detail::Scratch(scratch_begin));
 #else
     throw sycl::exception(
         std::error_code(PI_ERROR_INVALID_DEVICE, sycl::sycl_category()),
@@ -121,8 +121,8 @@ public:
     // Broadcast leader's pointer (the beginning of the scratch) to all work
     // items in the group.
     T *scratch_begin = sycl::group_broadcast(g, local_copy);
-    sycl::detail::merge_sort(g, scratch_begin, range_size, comp,
-                             scratch_begin + range_size);
+    sycl::detail::merge_sort(g, sycl::detail::Scratch(scratch_begin), range_size, comp,
+                             sycl::detail::Scratch(scratch_begin + range_size));
     val = *local_copy;
 #else
     throw sycl::exception(

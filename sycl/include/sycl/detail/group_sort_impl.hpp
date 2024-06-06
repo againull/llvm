@@ -68,6 +68,17 @@ struct GetValueType<sycl::multi_ptr<ElementType, Space, IsDecorated>> {
   using type = ElementType;
 };
 
+template<typename T>
+struct Scratch {
+  Scratch(T* Ptr) : Ptr{Ptr} {}
+
+  T& operator[](size_t index) {
+    *(std::launder(Ptr + index));
+  }
+
+  T* Ptr;
+};
+
 template <typename InAcc, typename OutAcc, typename Compare>
 void merge(const size_t offset, InAcc &in_acc1, OutAcc &out_acc1,
            const size_t start_1, const size_t end_1, const size_t end_2,
@@ -184,7 +195,7 @@ void bubble_sort(Iter first, const size_t begin, const size_t end,
 
 template <typename Group, typename Iter, typename T, typename Compare>
 void merge_sort(Group group, Iter first, const size_t n, Compare comp,
-                T *scratch) {
+                Scratch<T> scratch) {
   const size_t idx = group.get_local_linear_id();
   const size_t local = group.get_local_range().size();
   const size_t chunk = (n - 1) / local + 1;
