@@ -301,7 +301,7 @@ private:
                                      decltype(&::urProgramRelease)>;
   ProgramPtr build(ProgramPtr Program, const ContextImplPtr Context,
                    const std::string &CompileOptions,
-                   const std::string &LinkOptions, ur_device_handle_t Device,
+                   const std::string &LinkOptions, std::vector<ur_device_handle_t> &Devices,
                    uint32_t DeviceLibReqMask,
                    const std::vector<ur_program_handle_t> &ProgramsToLink,
                    bool CreatedFromBinary = false);

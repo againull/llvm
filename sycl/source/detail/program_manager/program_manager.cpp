@@ -838,9 +838,10 @@ ur_program_handle_t ProgramManager::getBuiltURProgram(
         ProgramsToLink.push_back(NativePrg);
       }
     }
+    std::vector<ur_device_handle_t> Devs = {getSyclObjImpl(Device).get()->getHandleRef()};;
     ProgramPtr BuiltProgram =
         build(std::move(ProgramManaged), ContextImpl, CompileOpts, LinkOpts,
-              getSyclObjImpl(Device).get()->getHandleRef(), DeviceLibReqMask,
+              Devs, DeviceLibReqMask,
               ProgramsToLink, /*CreatedFromBinary*/ Img.getFormat() !=
                                   SYCL_DEVICE_BINARY_TYPE_SPIRV);
     // Those extra programs won't be used anymore, just the final linked result
@@ -1463,13 +1464,13 @@ getDeviceLibPrograms(const ContextImplPtr Context,
 ProgramManager::ProgramPtr ProgramManager::build(
     ProgramPtr Program, const ContextImplPtr Context,
     const std::string &CompileOptions, const std::string &LinkOptions,
-    ur_device_handle_t Device, uint32_t DeviceLibReqMask,
+    std::vector<ur_device_handle_t> &Devices, uint32_t DeviceLibReqMask,
     const std::vector<ur_program_handle_t> &ExtraProgramsToLink,
     bool CreatedFromBinary) {
 
   if constexpr (DbgProgMgr > 0) {
     std::cerr << ">>> ProgramManager::build(" << Program.get() << ", "
-              << CompileOptions << ", " << LinkOptions << ", ... " << Device
+              << CompileOptions << ", " << LinkOptions << ", ... " << Devices[0]
               << ")\n";
   }
 
@@ -1484,7 +1485,7 @@ ProgramManager::ProgramPtr ProgramManager::build(
 
   std::vector<ur_program_handle_t> LinkPrograms;
   if (LinkDeviceLibs) {
-    LinkPrograms = getDeviceLibPrograms(Context, Device, DeviceLibReqMask);
+    LinkPrograms = getDeviceLibPrograms(Context, Devices[0], DeviceLibReqMask);
   }
 
   static const char *ForceLinkEnv = std::getenv("SYCL_FORCE_LINK");
@@ -1497,7 +1498,7 @@ ProgramManager::ProgramPtr ProgramManager::build(
                                      : (CompileOptions + " " + LinkOptions);
     ur_result_t Error =
         Plugin->call_nocheck(urProgramBuildExp, Program.get(),
-                             /*num devices =*/1, &Device, Options.c_str());
+                             Devices.size(), Devices.data(), Options.c_str());
     if (Error == UR_RESULT_ERROR_UNSUPPORTED_FEATURE) {
       Error = Plugin->call_nocheck(urProgramBuild, Context->getHandleRef(),
                                    Program.get(), Options.c_str());
@@ -1514,7 +1515,7 @@ ProgramManager::ProgramPtr ProgramManager::build(
 
   // Include the main program and compile/link everything together
   if (!CreatedFromBinary) {
-    auto Res = doCompile(Plugin, Program.get(), /*num devices =*/1, &Device,
+    auto Res = doCompile(Plugin, Program.get(), Devices.size(), Devices.data(),
                          Context->getHandleRef(), CompileOptions.c_str());
     Plugin->checkUrResult<errc::build>(Res);
   }
@@ -1522,7 +1523,7 @@ ProgramManager::ProgramPtr ProgramManager::build(
 
   for (ur_program_handle_t Prg : ExtraProgramsToLink) {
     if (!CreatedFromBinary) {
-      auto Res = doCompile(Plugin, Prg, /*num devices =*/1, &Device,
+      auto Res = doCompile(Plugin, Prg, Devices.size(), Devices.data(),
                            Context->getHandleRef(), CompileOptions.c_str());
       Plugin->checkUrResult<errc::build>(Res);
     }
@@ -1532,7 +1533,7 @@ ProgramManager::ProgramPtr ProgramManager::build(
   ur_program_handle_t LinkedProg = nullptr;
   auto doLink = [&] {
     auto Res = Plugin->call_nocheck(urProgramLinkExp, Context->getHandleRef(),
-                                    /*num devices =*/1, &Device,
+                                    Devices.size(), Devices.data(),
                                     LinkPrograms.size(), LinkPrograms.data(),
                                     LinkOptions.c_str(), &LinkedProg);
     if (Res == UR_RESULT_ERROR_UNSUPPORTED_FEATURE) {
@@ -2506,9 +2507,13 @@ device_image_plain ProgramManager::build(const device_image_plain &DeviceImage,
 
     // TODO: Add support for dynamic linking with kernel bundles
     std::vector<ur_program_handle_t> ExtraProgramsToLink;
+    std::vector<ur_device_handle_t> URDevices;
+    for (auto Dev : Devs) {
+      URDevices.push_back(getSyclObjImpl(Dev).get()->getHandleRef());
+    }
     ProgramPtr BuiltProgram =
         build(std::move(ProgramManaged), ContextImpl, CompileOpts, LinkOpts,
-              getSyclObjImpl(Devs[0]).get()->getHandleRef(), DeviceLibReqMask,
+              URDevices, DeviceLibReqMask,
               ExtraProgramsToLink);
 
     emitBuiltProgramInfo(BuiltProgram.get(), ContextImpl);
@@ -2709,9 +2714,10 @@ ur_kernel_handle_t ProgramManager::getOrCreateMaterializedKernel(
   applyOptionsFromEnvironment(CompileOpts, LinkOpts);
   // No linking of extra programs reqruired.
   std::vector<ur_program_handle_t> ExtraProgramsToLink;
+  std::vector<ur_device_handle_t> Devs = {DeviceImpl->getHandleRef()};
   auto BuildProgram =
       build(std::move(ProgramManaged), detail::getSyclObjImpl(Context),
-            CompileOpts, LinkOpts, DeviceImpl->getHandleRef(),
+            CompileOpts, LinkOpts, Devs,
             /*For non SPIR-V devices DeviceLibReqdMask is always 0*/ 0,
             ExtraProgramsToLink);
   ur_kernel_handle_t UrKernel{nullptr};
