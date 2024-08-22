@@ -49,8 +49,8 @@ getUrEvents(const std::vector<sycl::event> &DepEvents) {
   std::vector<ur_event_handle_t> RetUrEvents;
   for (const sycl::event &Event : DepEvents) {
     const EventImplPtr &EventImpl = detail::getSyclObjImpl(Event);
-    if (EventImpl->getHandleRef() != nullptr)
-      RetUrEvents.push_back(EventImpl->getHandleRef());
+    if (EventImpl->getHandle() != nullptr)
+      RetUrEvents.push_back(EventImpl->getHandle());
   }
   return RetUrEvents;
 }
@@ -307,7 +307,7 @@ void queue_impl::addEvent(const event &Event) {
   }
   // As long as the queue supports urQueueFinish we only need to store events
   // for unenqueued commands and host tasks.
-  else if (MEmulateOOO || EImpl->getHandleRef() == nullptr) {
+  else if (MEmulateOOO || EImpl->getHandle() == nullptr) {
     std::weak_ptr<event_impl> EventWeakPtr{EImpl};
     std::lock_guard<std::mutex> Lock{MMutex};
     MEventsWeak.push_back(std::move(EventWeakPtr));
@@ -447,8 +447,10 @@ event queue_impl::submitMemOpHelper(const std::shared_ptr<queue_impl> &Self,
       auto EventImpl = detail::getSyclObjImpl(ResEvent);
       {
         NestedCallsTracker tracker;
-        MemOpFunc(MemOpArgs..., getUrEvents(ExpandedDepEvents),
-                  &EventImpl->getHandleRef(), EventImpl);
+        ur_event_handle_t UREvent;
+        MemOpFunc(MemOpArgs..., getUrEvents(ExpandedDepEvents), &UREvent,
+                  EventImpl);
+        EventImpl->setHandle(UREvent);
       }
 
       if (isInOrder()) {
@@ -603,7 +605,7 @@ void queue_impl::wait(const detail::code_location &CodeLoc) {
             EventImplWeakPtrIt->lock()) {
       // A nullptr UR event indicates that urQueueFinish will not cover it,
       // either because it's a host task event or an unenqueued one.
-      if (!SupportsPiFinish || nullptr == EventImplSharedPtr->getHandleRef()) {
+      if (!SupportsPiFinish || nullptr == EventImplSharedPtr->getHandle()) {
         EventImplSharedPtr->wait(EventImplSharedPtr);
       }
     }
