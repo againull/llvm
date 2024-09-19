@@ -116,14 +116,8 @@ if(SYCL_UR_USE_FETCH_CONTENT)
       CACHE PATH "Path to external '${name}' adapter source dir" FORCE)
   endfunction()
 
-  set(UNIFIED_RUNTIME_REPO "https://github.com/oneapi-src/unified-runtime.git")
-  # commit 22962057df1b9d538e08088a7b75d9d8e7c29f90 (HEAD, origin/main, origin/HEAD)
-  # Merge: e824ddc2 f0a1c433
-  # Author: aarongreig <aaron.greig@codeplay.com>
-  # Date:   Fri Sep 27 16:54:04 2024 +0100
-  #     Merge pull request #2017 from nrspruit/new_sysman_init
-  #     [L0] Use zesInit for SysMan API usage
-  set(UNIFIED_RUNTIME_TAG 22962057df1b9d538e08088a7b75d9d8e7c29f90)
+  set(UNIFIED_RUNTIME_REPO "https://github.com/againull/unified-runtime")
+  set(UNIFIED_RUNTIME_TAG 2b1cf6ee0bb43e0a94359eda5e163445d691b42a)
 
   set(UMF_BUILD_EXAMPLES OFF CACHE INTERNAL "EXAMPLES")
   # Due to the use of dependentloadflag and no installer for UMF and hwloc we need

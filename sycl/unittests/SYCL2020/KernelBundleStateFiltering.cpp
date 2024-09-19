@@ -104,8 +104,10 @@ ur_result_t redefinedUrProgramCreate(void *pParams) {
 }
 
 ur_result_t redefinedUrProgramCreateWithBinary(void *pParams) {
-  auto params = *static_cast<ur_program_create_with_binary_params_t *>(pParams);
-  redefinedUrProgramCreateCommon(*params.ppBinary);
+  auto params =
+      *static_cast<ur_program_create_with_binary_exp_params_t *>(pParams);
+  for (uint32_t i = 0; i < *params.pnumDevices; ++i)
+    redefinedUrProgramCreateCommon(*params.pppBinaries[i]);
   return UR_RESULT_SUCCESS;
 }
 
@@ -153,9 +155,8 @@ TEST(KernelBundle, DeviceImageStateFiltering) {
   sycl::unittest::UrMock<> Mock;
   mock::getCallbacks().set_after_callback("urProgramCreateWithIL",
                                           &redefinedUrProgramCreate);
-  mock::getCallbacks().set_after_callback("urProgramCreateWithBinary",
+  mock::getCallbacks().set_after_callback("urProgramCreateWithBinaryExp",
                                           &redefinedUrProgramCreateWithBinary);
-
   // No kernel ids specified.
   {
     const sycl::device Dev = sycl::platform().get_devices()[0];

@@ -137,9 +137,11 @@ static ur_result_t redefinedDeviceGet(void *pParams) {
 
 std::vector<std::string> createWithBinaryLog;
 static ur_result_t redefinedProgramCreateWithBinary(void *pParams) {
-  auto params = *static_cast<ur_program_create_with_binary_params_t *>(pParams);
-  createWithBinaryLog.push_back(
-      reinterpret_cast<const char *>(*params.ppBinary));
+  auto params =
+      *static_cast<ur_program_create_with_binary_exp_params_t *>(pParams);
+  for (uint32_t i = 0; i < *params.pnumDevices; ++i)
+    createWithBinaryLog.push_back(
+        reinterpret_cast<const char *>(*params.pppBinaries[i]));
   return UR_RESULT_SUCCESS;
 }
 
@@ -204,7 +206,7 @@ class CompileTargetTest : public testing::Test {
 protected:
   sycl::unittest::UrMock<> Mock;
   CompileTargetTest() {
-    mock::getCallbacks().set_before_callback("urProgramCreateWithBinary",
+    mock::getCallbacks().set_before_callback("urProgramCreateWithBinaryExp",
                                              &redefinedProgramCreateWithBinary);
     mock::getCallbacks().set_before_callback("urProgramCreateWithIL",
                                              &redefinedProgramCreateWithIL);
