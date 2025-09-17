@@ -27,16 +27,16 @@ set(UR_OFFLOAD_INCLUDE_DIR "" CACHE PATH "Path to the directory containing LLVM 
 if (UR_OFFLOAD_INSTALL_DIR STREQUAL "" OR UR_OFFLOAD_INCLUDE_DIR STREQUAL "")
     include(ExternalProject)
     set(LLVM_PROJECT_SOURCE_DIR  ${CMAKE_BINARY_DIR}/llvm-src-offload)
-    set(LLVM_PROJECT_TAG  32beea0605f37ea7a6429375d41b19ee78ddfe7d)
+    set(LLVM_PROJECT_TAG  22a30c5b3ec24d4e94c31db9051208050592e015)
     set(OPENMP_INSTALL_DIR ${CMAKE_BINARY_DIR}/openmp-install)
     set(UR_OFFLOAD_INSTALL_DIR ${CMAKE_BINARY_DIR}/offload-install)
     set(UR_OFFLOAD_INCLUDE_DIR ${UR_OFFLOAD_INSTALL_DIR}/include)
 
-    execute_process(COMMAND git -C "${CMAKE_SOURCE_DIR}" worktree prune)
+    execute_process(COMMAND git -C "/iusers2/againull/llvm-project" worktree prune)
 
     if(NOT IS_DIRECTORY "${LLVM_PROJECT_SOURCE_DIR}")
         execute_process(
-            COMMAND git -C "${CMAKE_SOURCE_DIR}" worktree add --no-checkout --detach "${LLVM_PROJECT_SOURCE_DIR}" "${LLVM_PROJECT_TAG}"
+            COMMAND git -C "/iusers2/againull/llvm-project" worktree add --no-checkout --detach "${LLVM_PROJECT_SOURCE_DIR}" "${LLVM_PROJECT_TAG}"
             COMMAND_ERROR_IS_FATAL ANY
         )
     endif()
@@ -89,7 +89,7 @@ if (UR_OFFLOAD_INSTALL_DIR STREQUAL "" OR UR_OFFLOAD_INCLUDE_DIR STREQUAL "")
             -DCMAKE_CXX_COMPILER=${CMAKE_BINARY_DIR}/bin/clang++
             -DLIBOMPTARGET_LLVM_INCLUDE_DIRS=${LLVM_PROJECT_SOURCE_DIR}/llvm/include|${CMAKE_BINARY_DIR}/include
             -DLLVM_DIR=${CMAKE_BINARY_DIR}/lib/cmake/llvm
-            -DLIBOMPTARGET_PLUGINS_TO_BUILD=cuda|amdgpu
+            -DLIBOMPTARGET_PLUGINS_TO_BUILD=cuda|amdgpu|level_zero
             -DLIBOMP_INCLUDE_DIR=${OPENMP_INSTALL_DIR}/include
             -DLLVM_TABLEGEN=${CMAKE_BINARY_DIR}/bin/llvm-tblgen
             -DCMAKE_PREFIX_PATH=${OPENMP_INSTALL_DIR}|${CMAKE_BINARY_DIR}/bin
