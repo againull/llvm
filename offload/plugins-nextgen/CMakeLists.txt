@@ -49,6 +49,7 @@ endfunction()
 
 foreach(plugin IN LISTS LIBOMPTARGET_PLUGINS_TO_BUILD)
   if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${plugin})
+    message(FATAL_ERROR "Plugin source directory '${CMAKE_CURRENT_SOURCE_DIR}/${plugin}' does not exist")
     message(FATAL_ERROR "Unknown plugin target '${plugin}'")
   endif()
   add_subdirectory(${plugin})
