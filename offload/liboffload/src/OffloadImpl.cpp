@@ -396,6 +396,9 @@ Error olGetDeviceInfoImplDetail(ol_device_handle_t Device,
   case OL_DEVICE_INFO_VENDOR:
     return Info.writeString("Intel");
 
+  case OL_DEVICE_INFO_DRIVER_VERSION:
+    return Info.writeString("Unknown driver version");
+
   case OL_DEVICE_INFO_SINGLE_FP_CONFIG:
   case OL_DEVICE_INFO_DOUBLE_FP_CONFIG: {
     ol_device_fp_capability_flags_t flags{0};
