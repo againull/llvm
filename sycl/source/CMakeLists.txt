@@ -59,6 +59,7 @@ function(add_sycl_rt_library LIB_NAME LIB_OBJ_NAME)
   target_include_directories(
     ${LIB_OBJ_NAME}
     PRIVATE
+      ${CMAKE_BINARY_DIR}/offload-install/include
       ${CMAKE_CURRENT_SOURCE_DIR}
       ${sycl_inc_dir}
   )
@@ -85,6 +86,7 @@ function(add_sycl_rt_library LIB_NAME LIB_OBJ_NAME)
       ${CMAKE_DL_LIBS}
       ${CMAKE_THREAD_LIBS_INIT}
       $<$<NOT:$<BOOL:${WIN32}>>:UnifiedRuntimeLoader>
+      ${CMAKE_BINARY_DIR}/offload-install/lib/libLLVMOffload.so
       $<$<BOOL:${WIN32}>:shlwapi>
   )
 
