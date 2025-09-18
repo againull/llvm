@@ -187,6 +187,8 @@ size_t L0ProgramTy::readFile(const char *FileName,
   return FileSize;
 }
 
+extern "C" void __l0_level_zero_plugin_anchor() {}
+
 /// Read SPV from file name
 int32_t L0ProgramTy::readSPVFile(const char *FileName,
                                  std::vector<uint8_t> &OutSPV) const {
@@ -197,7 +199,7 @@ int32_t L0ProgramTy::readSPVFile(const char *FileName,
   HMODULE RTLModule = nullptr;
   if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                          (LPCSTR)&__tgt_target_data_begin_nowait,
+                          (LPCSTR)&__l0_level_zero_plugin_anchor,
                           &RTLModule)) {
     DP("Error: module creation failed -- cannot resolve full path\n");
     return OFFLOAD_FAIL;
@@ -209,7 +211,7 @@ int32_t L0ProgramTy::readSPVFile(const char *FileName,
   FullPath = RTLPath;
 #else  // _WIN32
   Dl_info RTLInfo;
-  if (!dladdr((void *)&__tgt_target_data_begin_nowait, &RTLInfo)) {
+  if (!dladdr((void *)&__l0_level_zero_plugin_anchor, &RTLInfo)) {
     DP("Error: module creation failed -- cannot resolve full path\n");
     return OFFLOAD_FAIL;
   }
