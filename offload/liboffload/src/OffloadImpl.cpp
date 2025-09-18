@@ -390,6 +390,9 @@ Error olGetDeviceInfoImplDetail(ol_device_handle_t Device,
   case OL_DEVICE_INFO_TYPE:
     return Info.write<ol_device_type_t>(OL_DEVICE_TYPE_GPU);
 
+  case OL_DEVICE_INFO_NAME:
+    return Info.writeString("Level Zero Device");
+
   case OL_DEVICE_INFO_SINGLE_FP_CONFIG:
   case OL_DEVICE_INFO_DOUBLE_FP_CONFIG: {
     ol_device_fp_capability_flags_t flags{0};
