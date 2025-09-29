@@ -444,20 +444,20 @@ Error GenericKernelTy::init(GenericDeviceTy &GenericDevice,
   ImagePtr = &Image;
 
   // Retrieve kernel environment object for the kernel.
-  std::string EnvironmentName = std::string(Name) + "_kernel_environment";
-  GenericGlobalHandlerTy &GHandler = GenericDevice.Plugin.getGlobalHandler();
-  if (GHandler.isSymbolInImage(GenericDevice, Image, EnvironmentName)) {
-    GlobalTy KernelEnv(EnvironmentName, sizeof(KernelEnvironment),
-                       &KernelEnvironment);
-    if (auto Err =
-            GHandler.readGlobalFromImage(GenericDevice, *ImagePtr, KernelEnv))
-      return Err;
-  } else {
-    KernelEnvironment = KernelEnvironmentTy{};
-    DP("Failed to read kernel environment for '%s' Using default Bare (0) "
-       "execution mode\n",
-       getName());
-  }
+  // std::string EnvironmentName = std::string(Name) + "_kernel_environment";
+  // GenericGlobalHandlerTy &GHandler = GenericDevice.Plugin.getGlobalHandler();
+  // if (GHandler.isSymbolInImage(GenericDevice, Image, EnvironmentName)) {
+  //   GlobalTy KernelEnv(EnvironmentName, sizeof(KernelEnvironment),
+  //                      &KernelEnvironment);
+  //   if (auto Err =
+  //           GHandler.readGlobalFromImage(GenericDevice, *ImagePtr, KernelEnv))
+  //     return Err;
+  // } else {
+  //   KernelEnvironment = KernelEnvironmentTy{};
+  //   DP("Failed to read kernel environment for '%s' Using default Bare (0) "
+  //      "execution mode\n",
+  //      getName());
+  // }
 
   // Max = Config.Max > 0 ? min(Config.Max, Device.Max) : Device.Max;
   MaxNumThreads = KernelEnvironment.Configuration.MaxThreads > 0
