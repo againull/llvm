@@ -53,7 +53,16 @@ UR_APIEXPORT ur_result_t UR_APICALL urDeviceGetInfo(ur_device_handle_t hDevice,
   case UR_DEVICE_INFO_VERSION:
     return ReturnValue("");
   case UR_DEVICE_INFO_EXTENSIONS:
+  {
+    ol_platform_backend_t Backend;
+    OL_RETURN_ON_ERR(olGetPlatformInfo(hDevice->Platform->OffloadPlatform,
+                                      OL_PLATFORM_INFO_BACKEND, sizeof(Backend),
+                                      &Backend));
+    if (Backend == OL_PLATFORM_BACKEND_LEVEL_ZERO) {
+        return ReturnValue("cl_khr_il_program");
+    }
     return ReturnValue("");
+  }
   case UR_DEVICE_INFO_USE_NATIVE_ASSERT:
     return ReturnValue(false);
   case UR_DEVICE_INFO_TYPE:
@@ -341,6 +350,8 @@ UR_APIEXPORT ur_result_t UR_APICALL urDeviceSelectBinary(
     ImageTarget = UR_DEVICE_BINARY_TARGET_NVPTX64;
   } else if (Backend == OL_PLATFORM_BACKEND_AMDGPU) {
     ImageTarget = UR_DEVICE_BINARY_TARGET_AMDGCN;
+  } else if (Backend == OL_PLATFORM_BACKEND_LEVEL_ZERO) {
+    ImageTarget = UR_DEVICE_BINARY_TARGET_SPIRV64;
   }
 
   for (uint32_t i = 0; i < NumBinaries; ++i) {
