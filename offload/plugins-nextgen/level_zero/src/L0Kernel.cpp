@@ -574,7 +574,9 @@ int32_t L0KernelTy::runTargetTeamRegion(L0DeviceTy &l0Device,
     DP("Setting indirect access flags " DPxMOD "\n", DPxPTR(FinalFlags));
     PrevFlags = Flags;
   }
-
+  GroupSizes[0] = 1;
+  GroupSizes[1] = 1;
+  GroupSizes[2] = 1;
   if (!GroupParamsReused) {
     CALL_ZE_RET_FAIL(zeKernelSetGroupSize, zeKernel, GroupSizes[0],
                      GroupSizes[1], GroupSizes[2]);
