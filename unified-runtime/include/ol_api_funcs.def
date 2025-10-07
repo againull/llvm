@@ -1,0 +1,79 @@
+
+/*
+ *
+ * Copyright (C) 2024 Intel Corporation
+ *
+ * Part of the Unified-Runtime Project, under the Apache License v2.0 with LLVM
+ * Exceptions.
+ *
+ * See LICENSE.TXT
+ *
+ * SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+ *
+ * @file ur_api_funcs.def
+ * @version v0.12-r0
+ *
+ */
+
+// Auto-generated file, do not edit.
+
+_OL_API(olCalculateOptimalOccupancy)
+_OL_API(olCalculateOptimalOccupancyWithCodeLoc)
+_OL_API(olCreateEvent)
+_OL_API(olCreateEventWithCodeLoc)
+_OL_API(olCreateProgram)
+_OL_API(olCreateProgramWithCodeLoc)
+_OL_API(olCreateQueue)
+_OL_API(olCreateQueueWithCodeLoc)
+_OL_API(olDestroyEvent)
+_OL_API(olDestroyEventWithCodeLoc)
+_OL_API(olDestroyProgram)
+_OL_API(olDestroyProgramWithCodeLoc)
+_OL_API(olDestroyQueue)
+_OL_API(olDestroyQueueWithCodeLoc)
+_OL_API(olGetDeviceInfo)
+_OL_API(olGetDeviceInfoWithCodeLoc)
+_OL_API(olGetDeviceInfoSize)
+_OL_API(olGetDeviceInfoSizeWithCodeLoc)
+_OL_API(olGetEventInfo)
+_OL_API(olGetEventInfoWithCodeLoc)
+_OL_API(olGetEventInfoSize)
+_OL_API(olGetEventInfoSizeWithCodeLoc)
+_OL_API(olGetPlatformInfo)
+_OL_API(olGetPlatformInfoWithCodeLoc)
+_OL_API(olGetPlatformInfoSize)
+_OL_API(olGetPlatformInfoSizeWithCodeLoc)
+_OL_API(olGetQueueInfo)
+_OL_API(olGetQueueInfoWithCodeLoc)
+_OL_API(olGetQueueInfoSize)
+_OL_API(olGetQueueInfoSizeWithCodeLoc)
+_OL_API(olGetSymbol)
+_OL_API(olGetSymbolWithCodeLoc)
+_OL_API(olGetSymbolInfo)
+_OL_API(olGetSymbolInfoWithCodeLoc)
+_OL_API(olGetSymbolInfoSize)
+_OL_API(olGetSymbolInfoSizeWithCodeLoc)
+_OL_API(olInit)
+_OL_API(olInitWithCodeLoc)
+_OL_API(olIterateDevices)
+_OL_API(olIterateDevicesWithCodeLoc)
+_OL_API(olLaunchHostFunction)
+_OL_API(olLaunchHostFunctionWithCodeLoc)
+_OL_API(olLaunchKernel)
+_OL_API(olLaunchKernelWithCodeLoc)
+_OL_API(olMemAlloc)
+_OL_API(olMemAllocWithCodeLoc)
+_OL_API(olMemFill)
+_OL_API(olMemFillWithCodeLoc)
+_OL_API(olMemFree)
+_OL_API(olMemFreeWithCodeLoc)
+_OL_API(olMemcpy)
+_OL_API(olMemcpyWithCodeLoc)
+_OL_API(olShutDown)
+_OL_API(olShutDownWithCodeLoc)
+_OL_API(olSyncEvent)
+_OL_API(olSyncEventWithCodeLoc)
+_OL_API(olSyncQueue)
+_OL_API(olSyncQueueWithCodeLoc)
+_OL_API(olWaitEvents)
+_OL_API(olWaitEventsWithCodeLoc)

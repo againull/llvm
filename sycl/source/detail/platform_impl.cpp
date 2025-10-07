@@ -10,6 +10,9 @@
 #include <detail/config.hpp>
 #include <detail/device_impl.hpp>
 #include <detail/global_handler.hpp>
+#include <detail/offload_dispatcher.hpp>
+#include <detail/offload_topology.hpp>
+#include <detail/ol.hpp>
 #include <detail/platform_impl.hpp>
 #include <detail/ur_info_code.hpp>
 #include <sycl/backend_types.hpp>
@@ -54,6 +57,34 @@ platform_impl::getOrMakePlatformImpl(ur_platform_handle_t UrPlatform,
           : platform_impl(APlatform, AAdapter) {}
     };
     Result = std::make_shared<creator>(UrPlatform, Adapter);
+    PlatformCache.emplace_back(Result);
+  }
+
+  return *Result;
+}
+
+platform_impl &
+platform_impl::getOrMakePlatformImpl(ol_platform_handle_t OlPlatform) {
+  std::shared_ptr<platform_impl> Result;
+  {
+    const std::lock_guard<std::mutex> Guard(
+        GlobalHandler::instance().getPlatformMapMutex());
+
+    std::vector<std::shared_ptr<platform_impl>> &PlatformCache =
+        GlobalHandler::instance().getPlatformCache();
+
+    // If we've already seen this platform, return the impl
+    for (const auto &PlatImpl : PlatformCache) {
+      if (PlatImpl->getOlHandleRef() == OlPlatform)
+        return *PlatImpl;
+    }
+
+    // Otherwise make the impl. Our ctor/dtor are private, so std::make_shared
+    // needs a bit of help...
+    struct creator : platform_impl {
+      creator(ol_platform_handle_t APlatform) : platform_impl(APlatform) {}
+    };
+    Result = std::make_shared<creator>(OlPlatform);
     PlatformCache.emplace_back(Result);
   }
 
@@ -162,37 +193,135 @@ std::vector<platform> platform_impl::getAdapterPlatforms(adapter_impl &Adapter,
   return Platforms;
 }
 
-// This routine has the side effect of registering each platform's last device
-// id into each adapter, which is used for device counting.
 std::vector<platform> platform_impl::get_platforms() {
-
-  // See which platform we want to be served by which adapter.
-  // There should be just one adapter serving each backend.
-  std::vector<adapter_impl *> &Adapters = ur::initializeUr();
-  std::vector<std::pair<platform, adapter_impl *>> PlatformsWithAdapter;
-
-  // Then check backend-specific adapters
-  for (auto &Adapter : Adapters) {
-    const auto &AdapterPlatforms = getAdapterPlatforms(*Adapter);
-    for (const auto &P : AdapterPlatforms) {
-      PlatformsWithAdapter.push_back({P, Adapter});
+  ol::initializeLibOffload();
+  auto &Dispatcher = GlobalHandler::instance().getOffloadDispatcher();
+  discoverOflloadDevices(Dispatcher);
+  std::vector<platform> Platforms;
+  for (const auto &Topo : GlobalHandler::instance().getOffloadTopologies()) {
+    for (const auto &OlPlatform : Topo.platforms()) {
+      platform Platform = detail::createSyclObjFromImpl<platform>(
+          getOrMakePlatformImpl(OlPlatform));
+      Platforms.push_back(std::move(Platform));
     }
   }
+  return Platforms;
+}
 
-  // For the selected platforms register them with their adapters
-  std::vector<platform> Platforms;
-  for (auto &Platform : PlatformsWithAdapter) {
-    auto &Adapter = Platform.second;
-    std::lock_guard<std::mutex> Guard(*Adapter->getAdapterMutex());
-    Adapter->getPlatformId(getSyclObjImpl(Platform.first)->getHandleRef());
-    Platforms.push_back(Platform.first);
+// This routine has the side effect of registering each platform's last device
+// id into each adapter, which is used for device counting.
+// std::vector<platform> platform_impl::get_platforms() {
+//    discover_offload_devices();
+//   // See which platform we want to be served by which adapter.
+//   // There should be just one adapter serving each backend.
+//   std::vector<adapter_impl *> &Adapters = ur::initializeUr();
+//   std::vector<std::pair<platform, adapter_impl *>> PlatformsWithAdapter;
+
+//   // Then check backend-specific adapters
+//   for (auto &Adapter : Adapters) {
+//     const auto &AdapterPlatforms = getAdapterPlatforms(*Adapter);
+//     for (const auto &P : AdapterPlatforms) {
+//       PlatformsWithAdapter.push_back({P, Adapter});
+//     }
+//   }
+
+//   // For the selected platforms register them with their adapters
+//   std::vector<platform> Platforms;
+//   for (auto &Platform : PlatformsWithAdapter) {
+//     auto &Adapter = Platform.second;
+//     std::lock_guard<std::mutex> Guard(*Adapter->getAdapterMutex());
+//     Adapter->getPlatformId(getSyclObjImpl(Platform.first)->getHandleRef());
+//     Platforms.push_back(Platform.first);
+//   }
+
+//   // This initializes a function-local variable whose destructor is invoked
+//   as
+//   // the SYCL shared library is first being unloaded.
+//   GlobalHandler::registerStaticVarShutdownHandler();
+
+//   return Platforms;
+// }
+
+// Implementation for liboffload
+template <typename ListT, typename FilterT>
+std::vector<int>
+platform_impl::filterDeviceFilter(std::vector<ol_device_handle_t> &OlDevices,
+                                  ListT *FilterList) const {
+
+  constexpr bool is_ods_target = std::is_same_v<FilterT, ods_target>;
+
+  if constexpr (is_ods_target) {
+
+    // Since we are working with ods_target filters ,which can be negative,
+    // we sort the filters so that all the negative filters appear before
+    // all the positive filters.  This enables us to have the full list of
+    // blacklisted devices by the time we get to the positive filters
+    // so that if a positive filter matches a blacklisted device we do
+    // not add it to the list of available devices.
+    std::sort(FilterList->get().begin(), FilterList->get().end(),
+              [](const ods_target &filter1, const ods_target &filter2) {
+                return filter1.IsNegativeTarget && !filter2.IsNegativeTarget;
+              });
   }
 
-  // This initializes a function-local variable whose destructor is invoked as
-  // the SYCL shared library is first being unloaded.
-  GlobalHandler::registerStaticVarShutdownHandler();
+  // this map keeps track of devices discarded by negative filters, it is only
+  // used in the ONEAPI_DEVICE_SELECTOR implemenation. It cannot be placed
+  // in the if statement above because it will then be out of scope in the rest
+  // of the function
+  std::map<int, bool> Blacklist;
+  // original indices keeps track of the device numbers of the chosen
+  // devices and is whats returned by the function
+  std::vector<int> original_indices;
 
-  return Platforms;
+  int InsertIDx = 0;
+  auto Backend = getBackend();
+  // Find topology for this backend
+  const Topology &Topo = ol::getBackendTopology(Backend);
+
+  for (ol_device_handle_t Device : OlDevices) {
+    ol_device_type_t OlDevType = OL_DEVICE_TYPE_ALL;
+    auto &Dispatcher = GlobalHandler::instance().getOffloadDispatcher();
+    // Dispatcher.call<OlApiKind::olDeviceGetInfo>(Device, OL_DEVICE_INFO_TYPE,
+    //                                            sizeof(ol_device_type_t),
+    //                                            &OlDevType, nullptr);
+    info::device_type DeviceType = detail::ConvertDeviceType(OlDevType);
+    int DeviceNum = Topo.get_device_global_index(Device);
+    for (const FilterT &Filter : FilterList->get()) {
+      backend FilterBackend = Filter.Backend.value_or(backend::all);
+      // First, match the backend entry.
+      if (FilterBackend != Backend && FilterBackend != backend::all)
+        continue;
+      info::device_type FilterDevType =
+          Filter.DeviceType.value_or(info::device_type::all);
+
+      // Match the device_num entry.
+      if (Filter.DeviceNum && DeviceNum != Filter.DeviceNum.value())
+        continue;
+
+      if (FilterDevType != info::device_type::all &&
+          FilterDevType != DeviceType)
+        continue;
+
+      if constexpr (is_ods_target) {
+        // Dealing with ONEAPI_DEVICE_SELECTOR - check for negative filters.
+        if (Blacklist[DeviceNum]) // already blacklisted.
+          break;
+
+        if (Filter.IsNegativeTarget) {
+          // Filter is negative and the device matches the filter so
+          // blacklist the device now.
+          Blacklist[DeviceNum] = true;
+          break;
+        }
+      }
+
+      OlDevices[InsertIDx++] = Device;
+      original_indices.push_back(DeviceNum);
+      break;
+    }
+  }
+  OlDevices.resize(InsertIDx);
+  return original_indices;
 }
 
 // Since ONEAPI_DEVICE_SELECTOR admits negative filters, we use type traits

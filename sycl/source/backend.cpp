@@ -70,6 +70,20 @@ backend convertUrBackend(ur_backend_t UrBackend) {
   }
 }
 
+backend convertOlBackend(ol_platform_backend_t OlBackend) {
+  switch (OlBackend) {
+  case OL_PLATFORM_BACKEND_LEVEL_ZERO:
+    return backend::ext_oneapi_level_zero;
+  case OL_PLATFORM_BACKEND_CUDA:
+    return backend::ext_oneapi_cuda;
+  case OL_PLATFORM_BACKEND_AMDGPU:
+    return backend::ext_oneapi_hip;
+  default:
+    throw exception(make_error_code(errc::runtime),
+                    "convertBackend: Unsupported backend");
+  }
+}
+
 platform make_platform(ur_native_handle_t NativeHandle, backend Backend) {
   adapter_impl &Adapter = getAdapter(Backend);
 

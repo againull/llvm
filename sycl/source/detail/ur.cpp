@@ -25,7 +25,6 @@
 #include <sycl/detail/ur.hpp>
 #include <sycl/version.hpp>
 #include <ur_api.h>
-#include <offload/OffloadAPI.h>
 
 #include <bitset>
 #include <cstdarg>
@@ -110,26 +109,8 @@ initializeUr(ur_loader_config_handle_t LoaderConfig) {
   return GlobalHandler::instance().getAdapters();
 }
 
-static void report_error(const char *Where, ol_result_t Res) {
-    if (Res == OL_SUCCESS) return;
-    fprintf(stderr, "%s failed: code=%d", Where, (int)Res->Code);
-    if (Res->Details)
-        fprintf(stderr, " details=%s", Res->Details);
-    fputc('\n', stderr);
-}
-
-static void initializeLibOffload() {
-  ol_result_t Res = olInit();
-  if (Res != OL_SUCCESS) {
-      report_error("olInit", Res);
-      std::terminate();
-  }
-  std::cout << "Initialized libOffload\n";
-}
-
 static void initializeAdapters(std::vector<adapter_impl *> &Adapters,
                                ur_loader_config_handle_t LoaderConfig) {
-  initializeLibOffload();
 #define CHECK_UR_SUCCESS(Call)                                                 \
   {                                                                            \
     if (ur_result_t error = Call) {                                            \

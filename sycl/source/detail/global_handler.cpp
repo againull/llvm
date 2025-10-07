@@ -15,6 +15,7 @@
 #include <detail/config.hpp>
 #include <detail/device_kernel_info.hpp>
 #include <detail/global_handler.hpp>
+#include <detail/offload_dispatcher.hpp>
 #include <detail/platform_impl.hpp>
 #include <detail/program_manager/program_manager.hpp>
 #include <detail/scheduler/scheduler.hpp>
@@ -212,6 +213,16 @@ std::vector<adapter_impl *> &GlobalHandler::getAdapters() {
   static std::vector<adapter_impl *> &adapters = getOrCreate(MAdapters);
   enableOnCrashStackPrinting();
   return adapters;
+}
+
+detail::OffloadDispatcher &GlobalHandler::getOffloadDispatcher() {
+  static detail::OffloadDispatcher &Disp = getOrCreate(MOffloadDispatcher);
+  return Disp;
+}
+
+std::vector<detail::Topology> &GlobalHandler::getOffloadTopologies() {
+  static std::vector<detail::Topology> &Topos = getOrCreate(MOffloadTopologies);
+  return Topos;
 }
 
 ods_target_list &

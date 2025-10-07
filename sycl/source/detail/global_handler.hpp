@@ -11,11 +11,14 @@
 #include <sycl/detail/spinlock.hpp>
 #include <sycl/detail/util.hpp>
 
+#include <sycl/backend.hpp>
 #ifndef __INTEL_PREVIEW_BREAKING_CHANGES
 #include <deque>
 #endif
+#include <detail/offload_topology.hpp>
 #include <memory>
 #include <unordered_map>
+#include <vector>
 
 namespace sycl {
 inline namespace _V1 {
@@ -29,6 +32,7 @@ class adapter_impl;
 class ods_target_list;
 class XPTIRegistry;
 class ThreadPool;
+class OffloadDispatcher;
 #ifndef __INTEL_PREVIEW_BREAKING_CHANGES
 struct KernelNameBasedCacheT;
 class DeviceKernelInfo;
@@ -75,6 +79,9 @@ public:
   std::mutex &getPlatformMapMutex();
   std::mutex &getFilterMutex();
   std::vector<adapter_impl *> &getAdapters();
+  OffloadDispatcher &getOffloadDispatcher();
+  // Offload topologies (one per backend) discovered from liboffload.
+  std::vector<detail::Topology> &getOffloadTopologies();
   ods_target_list &getOneapiDeviceSelectorTargets(const std::string &InitValue);
   XPTIRegistry &getXPTIRegistry();
   ThreadPool &getHostTaskThreadPool();
@@ -128,8 +135,10 @@ private:
   InstWithLock<std::mutex> MPlatformMapMutex;
   InstWithLock<std::mutex> MFilterMutex;
   InstWithLock<std::vector<adapter_impl *>> MAdapters;
+  InstWithLock<detail::OffloadDispatcher> MOffloadDispatcher;
   InstWithLock<ods_target_list> MOneapiDeviceSelectorTargets;
   InstWithLock<XPTIRegistry> MXPTIRegistry;
+  InstWithLock<std::vector<detail::Topology>> MOffloadTopologies;
   // Thread pool for host task and event callbacks execution
   InstWithLock<ThreadPool> MHostTaskThreadPool;
 #ifndef __INTEL_PREVIEW_BREAKING_CHANGES

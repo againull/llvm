@@ -87,6 +87,23 @@ inline info::device_type ConvertDeviceType(ur_device_type_t UrDevType) {
   }
 }
 
+inline info::device_type ConvertDeviceType(ol_device_type_t OlDevType) {
+  switch (OlDevType) {
+  case OL_DEVICE_TYPE_DEFAULT:
+    return info::device_type::automatic;
+  case OL_DEVICE_TYPE_ALL:
+    return info::device_type::all;
+  case OL_DEVICE_TYPE_GPU:
+    return info::device_type::gpu;
+  case OL_DEVICE_TYPE_CPU:
+    return info::device_type::cpu;
+  default:
+    assert(false);
+    // FIXME: what is that???
+    return info::device_type::custom;
+  }
+}
+
 // Note that UR's enums have weird *_FORCE_UINT32 values, we ignore them in the
 // callers. But we also can't write a fully-covered switch without mentioning it
 // there, which wouldn't make any sense. As such, ensure that "real" values

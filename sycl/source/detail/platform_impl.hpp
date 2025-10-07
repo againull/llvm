@@ -9,12 +9,15 @@
 #pragma once
 
 #include <detail/adapter_impl.hpp>
+#include <detail/offload_dispatcher.hpp>
+#include <detail/ol.hpp>
 #include <detail/split_string.hpp>
 #include <detail/ur.hpp>
 #include <detail/ur_info_code.hpp>
 #include <sycl/backend_types.hpp>
 #include <sycl/detail/cl.h>
 #include <sycl/detail/common.hpp>
+#include <sycl/detail/ol.hpp>
 #include <sycl/detail/ur.hpp>
 #include <sycl/info/info_desc.hpp>
 
@@ -48,6 +51,16 @@ class platform_impl : public std::enable_shared_from_this<platform_impl> {
         APlatform, UR_PLATFORM_INFO_BACKEND, sizeof(ur_backend_t), &UrBackend,
         nullptr);
     MBackend = convertUrBackend(UrBackend);
+  }
+
+  explicit platform_impl(ol_platform_handle_t APlatform)
+      : MOlPlatform(APlatform) {
+    // Find out backend of the platform
+    auto &Offload = GlobalHandler::instance().getOffloadDispatcher();
+    ol_platform_backend_t OlBackend = OL_PLATFORM_BACKEND_UNKNOWN;
+    Offload.call<OlApiKind::olGetPlatformInfo>(
+        APlatform, OL_PLATFORM_INFO_BACKEND, sizeof(OlBackend), &OlBackend);
+    MBackend = convertOlBackend(OlBackend);
   }
 
   ~platform_impl() = default;
@@ -126,6 +139,8 @@ public:
   /// \return a raw plug-in platform handle.
   const ur_platform_handle_t &getHandleRef() const { return MPlatform; }
 
+  const ol_platform_handle_t &getOlHandleRef() const { return MOlPlatform; }
+
   /// Returns all available SYCL platforms in the system.
   ///
   /// By default the resulting vector always contains a single SYCL host
@@ -182,6 +197,8 @@ public:
   static platform_impl &getOrMakePlatformImpl(ur_platform_handle_t UrPlatform,
                                               adapter_impl &Adapter);
 
+  static platform_impl &getOrMakePlatformImpl(ol_platform_handle_t OlPlatform);
+
   /// Queries the cache for the specified platform based on an input device.
   /// If found, returns the the cached platform_impl, otherwise creates a new
   /// one and caches it.
@@ -210,6 +227,11 @@ private:
   static std::vector<platform> getAdapterPlatforms(adapter_impl &Adapter,
                                                    bool Supported = true);
 
+  template <typename ListT, typename FilterT>
+  std::vector<int>
+  filterDeviceFilter(std::vector<ol_device_handle_t> &OlDevices,
+                     ListT *FilterList) const;
+
   // Helper to filter reportable devices in the platform
   template <typename ListT, typename FilterT>
   std::vector<int>
@@ -217,6 +239,7 @@ private:
                      ListT *FilterList) const;
 
   ur_platform_handle_t MPlatform = 0;
+  ol_platform_handle_t MOlPlatform = 0;
   backend MBackend;
 
   adapter_impl *MAdapter;

@@ -36,7 +36,10 @@ void *getOsLibraryFuncAddress(void *Library, const std::string &FunctionName) {
 }
 
 void *getURLoaderLibrary() { return nullptr; }
-
 } // namespace detail::ur
+
+namespace detail::ol {
+void *getLiboffloadLibrary() { return nullptr; }
+} // namespace detail::ol
 } // namespace _V1
 } // namespace sycl
