@@ -228,9 +228,8 @@ private:
                                                    bool Supported = true);
 
   template <typename ListT, typename FilterT>
-  std::vector<int>
-  filterDeviceFilter(std::vector<ol_device_handle_t> &OlDevices,
-                     ListT *FilterList) const;
+  std::pair<std::vector<ol_device_handle_t>, std::vector<int>>
+  getFilteredDevices(ol_device_type_t DeviceType, ListT *FilterList) const;
 
   // Helper to filter reportable devices in the platform
   template <typename ListT, typename FilterT>

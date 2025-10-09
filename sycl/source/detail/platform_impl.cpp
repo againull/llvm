@@ -244,8 +244,8 @@ std::vector<platform> platform_impl::get_platforms() {
 
 // Implementation for liboffload
 template <typename ListT, typename FilterT>
-std::vector<int>
-platform_impl::filterDeviceFilter(std::vector<ol_device_handle_t> &OlDevices,
+std::pair<std::vector<ol_device_handle_t>, std::vector<int>>
+platform_impl::getFilteredDevices(ol_device_type_t DeviceType,
                                   ListT *FilterList) const {
 
   constexpr bool is_ods_target = std::is_same_v<FilterT, ods_target>;
@@ -272,20 +272,29 @@ platform_impl::filterDeviceFilter(std::vector<ol_device_handle_t> &OlDevices,
   // original indices keeps track of the device numbers of the chosen
   // devices and is whats returned by the function
   std::vector<int> original_indices;
+  std::vector<ol_device_handle_t> OlDevices;
 
   int InsertIDx = 0;
   auto Backend = getBackend();
   // Find topology for this backend
   const Topology &Topo = ol::getBackendTopology(Backend);
-
-  for (ol_device_handle_t Device : OlDevices) {
+  size_t DeviceNum = 0;
+  for (ol_device_handle_t Dev : Topo.devices_for_platform(MOlPlatform)) {
     ol_device_type_t OlDevType = OL_DEVICE_TYPE_ALL;
-    auto &Dispatcher = GlobalHandler::instance().getOffloadDispatcher();
-    // Dispatcher.call<OlApiKind::olDeviceGetInfo>(Device, OL_DEVICE_INFO_TYPE,
-    //                                            sizeof(ol_device_type_t),
-    //                                            &OlDevType, nullptr);
+    auto &OffloadLib = GlobalHandler::instance().getOffloadDispatcher();
+    OffloadLib.call<OlApiKind::olGetDeviceInfo>(Dev, OL_DEVICE_INFO_TYPE,
+                                                sizeof(ol_device_type_t),
+                                                &OlDevType, nullptr);
+    // Filter by device type
+    if (DeviceType != OL_DEVICE_TYPE_ALL && DeviceType != OlDevType)
+      continue;
+
+    // Filter by SYCL_DEVICE_ALLOWLIST
+    if (!olDeviceIsAllowed(Dev, MOlPlatform))
+      continue;
+
+    // Filter by provided filter list
     info::device_type DeviceType = detail::ConvertDeviceType(OlDevType);
-    int DeviceNum = Topo.get_device_global_index(Device);
     for (const FilterT &Filter : FilterList->get()) {
       backend FilterBackend = Filter.Backend.value_or(backend::all);
       // First, match the backend entry.
@@ -315,13 +324,13 @@ platform_impl::filterDeviceFilter(std::vector<ol_device_handle_t> &OlDevices,
         }
       }
 
-      OlDevices[InsertIDx++] = Device;
+      OlDevices[InsertIDx++] = Dev;
       original_indices.push_back(DeviceNum);
+      DeviceNum++;
       break;
     }
   }
-  OlDevices.resize(InsertIDx);
-  return original_indices;
+  return std::make_pair(OlDevices, original_indices);
 }
 
 // Since ONEAPI_DEVICE_SELECTOR admits negative filters, we use type traits

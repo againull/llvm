@@ -11,6 +11,7 @@
 #include <sycl/detail/defines.hpp>
 #include <sycl/info/info_desc.hpp>
 
+#include <map>
 #include <optional>
 #include <ostream>
 #include <string>

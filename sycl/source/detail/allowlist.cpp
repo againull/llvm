@@ -363,6 +363,15 @@ bool deviceIsAllowed(const DeviceDescT &DeviceDesc,
   return ShouldDeviceBeAllowed;
 }
 
+bool olDeviceIsAllowed(ol_device_handle_t OlDevice,
+                       ol_platform_handle_t OlPlatform) {
+  if (!SYCLConfig<SYCL_DEVICE_ALLOWLIST>::get())
+    return true;
+
+  // TODO
+  return true;
+}
+
 void applyAllowList(std::vector<ur_device_handle_t> &UrDevices,
                     ur_platform_handle_t UrPlatform, adapter_impl &Adapter) {
 

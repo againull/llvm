@@ -15,6 +15,7 @@
 #pragma once
 
 #include <detail/offload_dispatcher.hpp>
+#include <detail/offload_topology.hpp>
 #include <memory>
 #include <offload/OffloadAPI.h>
 #include <string>

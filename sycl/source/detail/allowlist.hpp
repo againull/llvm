@@ -30,6 +30,10 @@ bool deviceIsAllowed(const DeviceDescT &DeviceDesc,
 void applyAllowList(std::vector<ur_device_handle_t> &UrDevices,
                     ur_platform_handle_t UrPlatform, adapter_impl &Adapter);
 
+// Checks if offload device is allowed by SYCL_DEVICE_ALLOWLIST.
+bool olDeviceIsAllowed(ol_device_handle_t OlDevice,
+                       ol_platform_handle_t OlPlatform);
+
 } // namespace detail
 } // namespace _V1
 } // namespace sycl

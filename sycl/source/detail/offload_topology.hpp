@@ -22,6 +22,8 @@ namespace sycl {
 inline namespace _V1 {
 namespace detail {
 
+class OffloadDispatcher;
+
 // Minimal span-like view
 template <class T> struct range_view {
   const T *ptr{};
@@ -112,17 +114,6 @@ struct Topology {
     Devices.push_back(Dev);
     DeviceIndex.emplace(Dev, DevIdx);
     PlatformDevices[PltIdx].count++;
-  }
-
-  // Method to get vector of devices for the platform filtered by ONEAPI_DEVICES_SELECTOR list of filters and device type.
-  // The returned vector contains the devices in the same order as in the
-  // original devices vector.
-  std::vector<ol_device_handle_t> get_filtered_platform_devices(
-      ol_platform_handle_t Platform,
-      ods_target_list *FilterList, ol_device_type_t DeviceType) const {
-    std::vector<ol_device_handle_t> Result;
-    // TODO
-    return Result;
   }
 
   ol_platform_backend_t backend() { return OlBackend; }
