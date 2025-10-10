@@ -136,6 +136,7 @@ static constexpr bool is_std_vector_v<std::vector<T>> = true;
 
 template <ur_device_info_t Desc> static constexpr auto ur_ret_type_impl() {
   if constexpr (false) {
+    ;
   }
 #define MAP(VALUE, ...) else if constexpr (Desc == VALUE) return __VA_ARGS__{};
 #include "ur_device_info_ret_types.inc"
@@ -219,9 +220,9 @@ class device_impl : public std::enable_shared_from_this<device_impl> {
 
   template <ur_device_info_t Desc, bool InitializingCache = false>
   decltype(auto) get_info_impl() const {
-    if constexpr (decltype(MCache)::has<URDesc<Desc>>() && !InitializingCache) {
-      return MCache.get<URDesc<Desc>>();
-    } else {
+    /*     if constexpr (decltype(MCache)::has<URDesc<Desc>>() &&
+       !InitializingCache) { return MCache.get<URDesc<Desc>>(); } else  */
+    {
       using ur_ret_t = ur_ret_type<Desc>;
       if constexpr (std::is_same_v<ur_ret_t, std::string>) {
         return urGetInfoString<UrApiKind::urDeviceGetInfo>(*this, Desc);
@@ -631,8 +632,11 @@ public:
     // template parameter for such delegation.
     [[maybe_unused]] constexpr bool DependentFalse = InitializingCache && false;
 
-    if constexpr (decltype(MCache)::has<Param>() && !InitializingCache) {
-      return MCache.get<Param>();
+    // if constexpr (decltype(MCache)::has<Param>() && !InitializingCache) {
+    //   return MCache.get<Param>();
+    // }
+    if constexpr (false) {
+      ;
     }
 #define CASE(PARAM) else if constexpr (std::is_same_v<Param, PARAM>)
     // device_traits.def
@@ -1254,9 +1258,12 @@ public:
   // template version is necessary to make this cacheable (cache lookup needs
   // compile-time data).
   template <aspect Aspect, bool InitializingCache = false> bool has() const {
-    if constexpr (decltype(MCache)::has<AspectDesc<Aspect>>() &&
-                  !InitializingCache) {
-      return MCache.get<AspectDesc<Aspect>>();
+    // if constexpr (decltype(MCache)::has<AspectDesc<Aspect>>() &&
+    //               !InitializingCache) {
+    //   return MCache.get<AspectDesc<Aspect>>();
+    // }
+    if constexpr (false) {
+      ;
     }
 #define CASE(ASPECT) else if constexpr (Aspect == aspect::ASPECT)
     CASE(host) {
@@ -2311,43 +2318,44 @@ private:
   //
   // To make an addition property cacheable just expand one of the caches below
   // with that property, no other changes should be necessary.
-  mutable JointCache<
-      UREagerCache<UR_DEVICE_INFO_TYPE, UR_DEVICE_INFO_USE_NATIVE_ASSERT,
-                   UR_DEVICE_INFO_EXTENSIONS>, //
-      URCallOnceCache<UR_DEVICE_INFO_NAME,
-                      // USM:
-                      UR_DEVICE_INFO_USM_DEVICE_SUPPORT,
-                      UR_DEVICE_INFO_USM_HOST_SUPPORT,
-                      UR_DEVICE_INFO_USM_SINGLE_SHARED_SUPPORT,
-                      UR_DEVICE_INFO_USM_CROSS_SHARED_SUPPORT,
-                      UR_DEVICE_INFO_USM_SYSTEM_SHARED_SUPPORT,
-                      //
-                      UR_DEVICE_INFO_ATOMIC_64>, //
-      EagerCache<InfoInitializer>,               //
-      CallOnceCache<InfoInitializer,
-                    ext::oneapi::experimental::info::device::architecture>, //
-      AspectCache<EagerCache, aspect::fp16, aspect::fp64,
-                  aspect::int64_base_atomics, aspect::int64_extended_atomics,
-                  aspect::ext_oneapi_atomic16>,
-      AspectCache<
-          CallOnceCache,
-          // Slow, >100ns (for baseline cached ~30..40ns):
-          aspect::ext_intel_pci_address, aspect::ext_intel_gpu_eu_count,
-          aspect::ext_intel_free_memory, aspect::ext_intel_fan_speed,
-          aspect::ext_intel_power_limits,
-          // medium-slow, 60-90ns (for baseline cached ~30..40ns):
-          aspect::ext_intel_gpu_eu_simd_width, aspect::ext_intel_gpu_slices,
-          aspect::ext_intel_gpu_subslices_per_slice,
-          aspect::ext_intel_gpu_eu_count_per_subslice,
-          aspect::ext_intel_device_info_uuid,
-          aspect::ext_intel_gpu_hw_threads_per_eu,
-          aspect::ext_intel_memory_clock_rate,
-          aspect::ext_intel_memory_bus_width,
-          aspect::ext_oneapi_bindless_images,
-          aspect::ext_oneapi_bindless_images_1d_usm,
-          aspect::ext_oneapi_bindless_images_2d_usm,
-          aspect::ext_oneapi_is_composite, aspect::ext_oneapi_is_component>>
-      MCache;
+  // mutable JointCache<
+  //     UREagerCache<UR_DEVICE_INFO_TYPE, UR_DEVICE_INFO_USE_NATIVE_ASSERT,
+  //                  UR_DEVICE_INFO_EXTENSIONS>, //
+  //     URCallOnceCache<UR_DEVICE_INFO_NAME,
+  //                     // USM:
+  //                     UR_DEVICE_INFO_USM_DEVICE_SUPPORT,
+  //                     UR_DEVICE_INFO_USM_HOST_SUPPORT,
+  //                     UR_DEVICE_INFO_USM_SINGLE_SHARED_SUPPORT,
+  //                     UR_DEVICE_INFO_USM_CROSS_SHARED_SUPPORT,
+  //                     UR_DEVICE_INFO_USM_SYSTEM_SHARED_SUPPORT,
+  //                     //
+  //                     UR_DEVICE_INFO_ATOMIC_64>, //
+  //     EagerCache<InfoInitializer>,               //
+  //     CallOnceCache<InfoInitializer,
+  //                   ext::oneapi::experimental::info::device::architecture>,
+  //                   //
+  //     AspectCache<EagerCache, aspect::fp16, aspect::fp64,
+  //                 aspect::int64_base_atomics, aspect::int64_extended_atomics,
+  //                 aspect::ext_oneapi_atomic16>,
+  //     AspectCache<
+  //         CallOnceCache,
+  //         // Slow, >100ns (for baseline cached ~30..40ns):
+  //         aspect::ext_intel_pci_address, aspect::ext_intel_gpu_eu_count,
+  //         aspect::ext_intel_free_memory, aspect::ext_intel_fan_speed,
+  //         aspect::ext_intel_power_limits,
+  //         // medium-slow, 60-90ns (for baseline cached ~30..40ns):
+  //         aspect::ext_intel_gpu_eu_simd_width, aspect::ext_intel_gpu_slices,
+  //         aspect::ext_intel_gpu_subslices_per_slice,
+  //         aspect::ext_intel_gpu_eu_count_per_subslice,
+  //         aspect::ext_intel_device_info_uuid,
+  //         aspect::ext_intel_gpu_hw_threads_per_eu,
+  //         aspect::ext_intel_memory_clock_rate,
+  //         aspect::ext_intel_memory_bus_width,
+  //         aspect::ext_oneapi_bindless_images,
+  //         aspect::ext_oneapi_bindless_images_1d_usm,
+  //         aspect::ext_oneapi_bindless_images_2d_usm,
+  //         aspect::ext_oneapi_is_composite, aspect::ext_oneapi_is_component>>
+  //     MCache;
 
 }; // class device_impl
 

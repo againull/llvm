@@ -258,23 +258,18 @@ platform_impl::getFilteredDevices(ol_device_type_t DeviceType,
     // blacklisted devices by the time we get to the positive filters
     // so that if a positive filter matches a blacklisted device we do
     // not add it to the list of available devices.
-    std::sort(FilterList->get().begin(), FilterList->get().end(),
-              [](const ods_target &filter1, const ods_target &filter2) {
-                return filter1.IsNegativeTarget && !filter2.IsNegativeTarget;
-              });
+    if (FilterList)
+      std::sort(FilterList->get().begin(), FilterList->get().end(),
+                [](const ods_target &filter1, const ods_target &filter2) {
+                  return filter1.IsNegativeTarget && !filter2.IsNegativeTarget;
+                });
   }
 
-  // this map keeps track of devices discarded by negative filters, it is only
-  // used in the ONEAPI_DEVICE_SELECTOR implemenation. It cannot be placed
-  // in the if statement above because it will then be out of scope in the rest
-  // of the function
-  std::map<int, bool> Blacklist;
   // original indices keeps track of the device numbers of the chosen
   // devices and is whats returned by the function
   std::vector<int> original_indices;
   std::vector<ol_device_handle_t> OlDevices;
 
-  int InsertIDx = 0;
   auto Backend = getBackend();
   // Find topology for this backend
   const Topology &Topo = ol::getBackendTopology(Backend);
@@ -294,40 +289,48 @@ platform_impl::getFilteredDevices(ol_device_type_t DeviceType,
 
     // Filter by provided filter list
     info::device_type DeviceType = detail::ConvertDeviceType(OlDevType);
-    for (const FilterT &Filter : FilterList->get()) {
-      backend FilterBackend = Filter.Backend.value_or(backend::all);
-      // First, match the backend entry.
-      if (FilterBackend != Backend && FilterBackend != backend::all)
-        continue;
-      info::device_type FilterDevType =
-          Filter.DeviceType.value_or(info::device_type::all);
+    if (FilterList) {
+      // this map keeps track of devices discarded by negative filters, it is
+      // only used in the ONEAPI_DEVICE_SELECTOR implemenation.
+      std::map<int, bool> Blacklist;
+      for (const FilterT &Filter : FilterList->get()) {
+        backend FilterBackend = Filter.Backend.value_or(backend::all);
+        // First, match the backend entry.
+        if (FilterBackend != Backend && FilterBackend != backend::all)
+          continue;
+        info::device_type FilterDevType =
+            Filter.DeviceType.value_or(info::device_type::all);
 
-      // Match the device_num entry.
-      if (Filter.DeviceNum && DeviceNum != Filter.DeviceNum.value())
-        continue;
+        // Match the device_num entry.
+        if (Filter.DeviceNum && DeviceNum != Filter.DeviceNum.value())
+          continue;
 
-      if (FilterDevType != info::device_type::all &&
-          FilterDevType != DeviceType)
-        continue;
+        if (FilterDevType != info::device_type::all &&
+            FilterDevType != DeviceType)
+          continue;
 
-      if constexpr (is_ods_target) {
-        // Dealing with ONEAPI_DEVICE_SELECTOR - check for negative filters.
-        if (Blacklist[DeviceNum]) // already blacklisted.
-          break;
+        if constexpr (is_ods_target) {
+          // Dealing with ONEAPI_DEVICE_SELECTOR - check for negative filters.
+          if (Blacklist[DeviceNum]) // already blacklisted.
+            break;
 
-        if (Filter.IsNegativeTarget) {
-          // Filter is negative and the device matches the filter so
-          // blacklist the device now.
-          Blacklist[DeviceNum] = true;
-          break;
+          if (Filter.IsNegativeTarget) {
+            // Filter is negative and the device matches the filter so
+            // blacklist the device now.
+            Blacklist[DeviceNum] = true;
+            break;
+          }
         }
-      }
 
-      OlDevices[InsertIDx++] = Dev;
+        OlDevices.push_back(Dev);
+        original_indices.push_back(DeviceNum);
+        break;
+      }
+    } else {
+      OlDevices.push_back(Dev);
       original_indices.push_back(DeviceNum);
-      DeviceNum++;
-      break;
     }
+    DeviceNum++;
   }
   return std::make_pair(OlDevices, original_indices);
 }

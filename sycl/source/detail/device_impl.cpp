@@ -27,9 +27,10 @@ device_impl::device_impl(ur_device_handle_t Device, platform_impl &Platform,
       // No need to set MRootDevice when MAlwaysRootDevice is true
       MRootDevice(Platform.MAlwaysRootDevice
                       ? nullptr
-                      : get_info_impl<UR_DEVICE_INFO_PARENT_DEVICE>()),
-      // TODO catch an exception and put it to list of asynchronous exceptions:
-      MCache{*this} {
+                      : get_info_impl<UR_DEVICE_INFO_PARENT_DEVICE>())
+// TODO catch an exception and put it to list of asynchronous exceptions:
+// MCache{*this}
+{
   // Interoperability Constructor already calls DeviceRetain in
   // urDeviceCreateWithNativeHandle.
   getAdapter().call<UrApiKind::urDeviceRetain>(MDevice);
@@ -39,12 +40,16 @@ device_impl::device_impl(ur_device_handle_t Device, platform_impl &Platform,
 /// offload device instance.
 device_impl::device_impl(ol_device_handle_t Device, platform_impl &Platform,
                          device_impl::private_tag)
-    : MOlDevice(Device), MPlatform(Platform), MRootDevice(nullptr),
-      // TODO catch an exception and put it to list of asynchronous exceptions:
-      MCache{*this} {}
+    : MOlDevice(Device), MPlatform(Platform), MRootDevice(nullptr)
+// TODO catch an exception and put it to list of asynchronous exceptions:
+// MCache{*this}
+{}
 
 device_impl::~device_impl() {
   try {
+    if (!MDevice)
+      return;
+
     // TODO catch an exception and put it to list of asynchronous exceptions
     adapter_impl &Adapter = getAdapter();
     ur_result_t Err = Adapter.call_nocheck<UrApiKind::urDeviceRelease>(MDevice);
