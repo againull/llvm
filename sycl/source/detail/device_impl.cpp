@@ -35,6 +35,14 @@ device_impl::device_impl(ur_device_handle_t Device, platform_impl &Platform,
   getAdapter().call<UrApiKind::urDeviceRetain>(MDevice);
 }
 
+/// Constructs a SYCL device instance using the provided
+/// offload device instance.
+device_impl::device_impl(ol_device_handle_t Device, platform_impl &Platform,
+                         device_impl::private_tag)
+    : MOlDevice(Device), MPlatform(Platform), MRootDevice(nullptr),
+      // TODO catch an exception and put it to list of asynchronous exceptions:
+      MCache{*this} {}
+
 device_impl::~device_impl() {
   try {
     // TODO catch an exception and put it to list of asynchronous exceptions

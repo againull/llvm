@@ -611,43 +611,70 @@ platform_impl::get_devices(info::device_type DeviceType) const {
   if (DeviceType == info::device_type::host)
     return std::vector<device>{};
 
-  // For custom devices, UR has additional type enums.
-  if (DeviceType == info::device_type::custom) {
-    getDevicesImplHelper(UR_DEVICE_TYPE_CUSTOM, Res);
-    getDevicesImplHelper(UR_DEVICE_TYPE_MCA, Res);
-    getDevicesImplHelper(UR_DEVICE_TYPE_VPU, Res);
-    // Some backends may return the MCA and VPU types as part of custom, so
-    // remove duplicates.
-    std::sort(Res.begin(), Res.end(),
-              [](const sycl::device &D1, const sycl::device &D2) {
-                std::hash<sycl::device> Hasher;
-                return Hasher(D1) < Hasher(D2);
-              });
-    auto NewEnd = std::unique(Res.begin(), Res.end());
-    Res.erase(NewEnd, Res.end());
-    return Res;
-  }
-
-  ur_device_type_t UrDeviceType = [DeviceType]() {
+  ol_device_type_t OlDeviceType = [DeviceType]() {
     switch (DeviceType) {
     case info::device_type::all:
-      return UR_DEVICE_TYPE_ALL;
+      return OL_DEVICE_TYPE_ALL;
     case info::device_type::gpu:
-      return UR_DEVICE_TYPE_GPU;
+      return OL_DEVICE_TYPE_GPU;
     case info::device_type::cpu:
-      return UR_DEVICE_TYPE_CPU;
-    case info::device_type::accelerator:
-      return UR_DEVICE_TYPE_FPGA;
+      return OL_DEVICE_TYPE_CPU;
     case info::device_type::automatic:
-      return UR_DEVICE_TYPE_DEFAULT;
+      return OL_DEVICE_TYPE_DEFAULT;
     default:
       throw sycl::exception(sycl::make_error_code(sycl::errc::invalid),
                             "Unknown device type.");
     }
   }();
-  getDevicesImplHelper(UrDeviceType, Res);
+  getDevicesImplHelper(OlDeviceType, Res);
   return Res;
 }
+
+// std::vector<device>
+// platform_impl::get_devices(info::device_type DeviceType) const {
+//   std::vector<device> Res;
+//   // Host is no longer supported, so it returns an empty vector.
+//   if (DeviceType == info::device_type::host)
+//     return std::vector<device>{};
+
+//   // For custom devices, UR has additional type enums.
+//   if (DeviceType == info::device_type::custom) {
+//     getDevicesImplHelper(UR_DEVICE_TYPE_CUSTOM, Res);
+//     getDevicesImplHelper(UR_DEVICE_TYPE_MCA, Res);
+//     getDevicesImplHelper(UR_DEVICE_TYPE_VPU, Res);
+
+//     // Some backends may return the MCA and VPU types as part of custom, so
+//     // remove duplicates.
+//     std::sort(Res.begin(), Res.end(),
+//               [](const sycl::device &D1, const sycl::device &D2) {
+//                 std::hash<sycl::device> Hasher;
+//                 return Hasher(D1) < Hasher(D2);
+//               });
+//     auto NewEnd = std::unique(Res.begin(), Res.end());
+//     Res.erase(NewEnd, Res.end());
+//     return Res;
+//   }
+
+//   ur_device_type_t UrDeviceType = [DeviceType]() {
+//     switch (DeviceType) {
+//     case info::device_type::all:
+//       return UR_DEVICE_TYPE_ALL;
+//     case info::device_type::gpu:
+//       return UR_DEVICE_TYPE_GPU;
+//     case info::device_type::cpu:
+//       return UR_DEVICE_TYPE_CPU;
+//     case info::device_type::accelerator:
+//       return UR_DEVICE_TYPE_FPGA;
+//     case info::device_type::automatic:
+//       return UR_DEVICE_TYPE_DEFAULT;
+//     default:
+//       throw sycl::exception(sycl::make_error_code(sycl::errc::invalid),
+//                             "Unknown device type.");
+//     }
+//   }();
+//   getDevicesImplHelper(UrDeviceType, Res);
+//   return Res;
+// }
 
 void platform_impl::getDevicesImplHelper(ol_device_type_t OlDeviceType,
                                          std::vector<device> &OutVec) const {
