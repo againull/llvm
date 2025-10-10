@@ -176,6 +176,14 @@ public:
   /// \return a device_impl* corresponding to the device
   device_impl *getDeviceImpl(ur_device_handle_t UrDevice);
 
+  /// Queries the device_impl cache to return a shared_ptr for the
+  /// device_impl corresponding to the OlDevice.
+  ///
+  /// \param OlDevice is the OlDevice whose impl is requested
+  ///
+  /// \return a device_impl* corresponding to the device
+  device_impl *getDeviceImpl(ol_device_handle_t OlDevice);
+
   /// Queries the device_impl cache to either return a shared_ptr
   /// for the device_impl corresponding to the UrDevice or add
   /// a new entry to the cache
@@ -186,6 +194,17 @@ public:
   ///
   /// \return a device_impl* corresponding to the device
   device_impl &getOrMakeDeviceImpl(ur_device_handle_t UrDevice);
+
+  /// Queries the device_impl cache to either return a shared_ptr
+  /// for the device_impl corresponding to the OlDevice or add
+  /// a new entry to the cache
+  ///
+  /// \param OlDevice is the OlDevice whose impl is requested
+  ///
+  /// \param PlatormImpl is the Platform for that Device
+  ///
+  /// \return a device_impl* corresponding to the device
+  device_impl &getOrMakeDeviceImpl(ol_device_handle_t OlDevice);
 
   /// Queries the cache to see if the specified UR platform has been seen
   /// before.  If so, return the cached platform_impl, otherwise create a new
@@ -220,6 +239,10 @@ public:
 private:
   device_impl *getDeviceImplHelper(ur_device_handle_t UrDevice);
 
+  device_impl *getDeviceImplHelper(ol_device_handle_t OlDevice);
+
+  void getDevicesImplHelper(ol_device_type_t OlDeviceType,
+                            std::vector<device> &OutVec) const;
   void getDevicesImplHelper(ur_device_type_t UrDeviceType,
                             std::vector<device> &OutVec) const;
 

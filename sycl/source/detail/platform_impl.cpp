@@ -278,13 +278,12 @@ platform_impl::getFilteredDevices(ol_device_type_t DeviceType,
   auto Backend = getBackend();
   // Find topology for this backend
   const Topology &Topo = ol::getBackendTopology(Backend);
-  size_t DeviceNum = 0;
+  int DeviceNum = 0;
   for (ol_device_handle_t Dev : Topo.devices_for_platform(MOlPlatform)) {
     ol_device_type_t OlDevType = OL_DEVICE_TYPE_ALL;
     auto &OffloadLib = GlobalHandler::instance().getOffloadDispatcher();
-    OffloadLib.call<OlApiKind::olGetDeviceInfo>(Dev, OL_DEVICE_INFO_TYPE,
-                                                sizeof(ol_device_type_t),
-                                                &OlDevType, nullptr);
+    OffloadLib.call<OlApiKind::olGetDeviceInfo>(
+        Dev, OL_DEVICE_INFO_TYPE, sizeof(ol_device_type_t), &OlDevType);
     // Filter by device type
     if (DeviceType != OL_DEVICE_TYPE_ALL && DeviceType != OlDevType)
       continue;
@@ -429,6 +428,24 @@ platform_impl::filterDeviceFilter(std::vector<ur_device_handle_t> &UrDevices,
   // the same backend. For example, opencl:cpu:0, opencl:acc:1, opencl:gpu:2
   MAdapter->setLastDeviceId(MPlatform, DeviceNum);
   return original_indices;
+}
+
+device_impl *platform_impl::getDeviceImpl(ol_device_handle_t OlDevice) {
+  const std::lock_guard<std::mutex> Guard(MDeviceMapMutex);
+  return getDeviceImplHelper(OlDevice);
+}
+
+device_impl &platform_impl::getOrMakeDeviceImpl(ol_device_handle_t OlDevice) {
+  const std::lock_guard<std::mutex> Guard(MDeviceMapMutex);
+  // If we've already seen this device, return the impl
+  if (device_impl *Result = getDeviceImplHelper(OlDevice))
+    return *Result;
+
+  // Otherwise make the impl
+  MDevices.emplace_back(std::make_shared<device_impl>(
+      OlDevice, *this, device_impl::private_tag{}));
+
+  return *MDevices.back();
 }
 
 device_impl *platform_impl::getDeviceImpl(ur_device_handle_t UrDevice) {
@@ -632,6 +649,36 @@ platform_impl::get_devices(info::device_type DeviceType) const {
   return Res;
 }
 
+void platform_impl::getDevicesImplHelper(ol_device_type_t OlDeviceType,
+                                         std::vector<device> &OutVec) const {
+  size_t InitialOutVecSize = OutVec.size();
+  // Get filtered devices
+  ods_target_list *OdsTargetList = SYCLConfig<ONEAPI_DEVICE_SELECTOR>::get();
+  auto [OlDevices, PlatformDeviceIndices] =
+      getFilteredDevices<ods_target_list, ods_target>(OlDeviceType,
+                                                      OdsTargetList);
+
+  // The next step is to inflate the filtered UrDevices into SYCL Device
+  // objects.
+  platform_impl &PlatformImpl = getOrMakePlatformImpl(MPlatform, *MAdapter);
+  std::transform(OlDevices.begin(), OlDevices.end(), std::back_inserter(OutVec),
+                 [&PlatformImpl](const ol_device_handle_t OlDevice) -> device {
+                   return detail::createSyclObjFromImpl<device>(
+                       PlatformImpl.getOrMakeDeviceImpl(OlDevice));
+                 });
+
+  // If we aren't using ONEAPI_DEVICE_SELECTOR, then we are done.
+  // and if there are no new devices, there won't be any need to replace them
+  // with subdevices.
+  if (!OdsTargetList || OutVec.size() == InitialOutVecSize)
+    return;
+
+  // Otherwise, our last step is to revisit the devices, possibly replacing
+  // them with subdevices (which have been ignored until now)
+  OutVec = amendDeviceAndSubDevices(getBackend(), OutVec, OdsTargetList,
+                                    PlatformDeviceIndices, PlatformImpl);
+}
+
 void platform_impl::getDevicesImplHelper(ur_device_type_t UrDeviceType,
                                          std::vector<device> &OutVec) const {
   size_t InitialOutVecSize = OutVec.size();
@@ -795,6 +842,14 @@ bool platform_impl::has(aspect Aspect) const {
 device_impl *platform_impl::getDeviceImplHelper(ur_device_handle_t UrDevice) {
   for (const std::shared_ptr<device_impl> &Device : MDevices) {
     if (Device->getHandleRef() == UrDevice)
+      return Device.get();
+  }
+  return nullptr;
+}
+
+device_impl *platform_impl::getDeviceImplHelper(ol_device_handle_t OlDevice) {
+  for (const std::shared_ptr<device_impl> &Device : MDevices) {
+    if (Device->getOlHandleRef() == OlDevice)
       return Device.get();
   }
   return nullptr;

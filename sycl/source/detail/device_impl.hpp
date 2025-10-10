@@ -451,6 +451,8 @@ public:
   explicit device_impl(ur_device_handle_t Device, platform_impl &Platform,
                        private_tag);
 
+  explicit device_impl(ol_device_handle_t Device, platform_impl &Platform,
+                       private_tag);
   ~device_impl();
 
   /// Get instance of OpenCL device
@@ -472,6 +474,20 @@ public:
   ///
   /// \return constant reference to UR device
   const ur_device_handle_t &getHandleRef() const { return MDevice; }
+
+  /// Get reference to offload device
+  ///
+  /// For host device an exception is thrown
+  ///
+  /// \return non-constant reference to offload device handle
+  ol_device_handle_t &getOlHandleRef() { return MOlDevice; }
+
+  /// Get constant reference to offload device
+  ///
+  /// For host device an exception is thrown
+  ///
+  /// \return constant reference to offload device handle
+  const ol_device_handle_t &getOlHandleRef() const { return MOlDevice; }
 
   /// Check if device is a CPU device
   ///
@@ -2280,6 +2296,7 @@ public:
 
 private:
   ur_device_handle_t MDevice = 0;
+  ol_device_handle_t MOlDevice = 0;
   // This is used for getAdapter so should be above other properties.
   platform_impl &MPlatform;
 
