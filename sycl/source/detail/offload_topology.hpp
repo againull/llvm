@@ -43,7 +43,10 @@ struct Range {
 
 // Contiguous global storage of platform and device handles for a backend.
 struct Topology {
+  Topology() : OlBackend(OL_PLATFORM_BACKEND_UNKNOWN) {}
   Topology(ol_platform_backend_t OlBackend) : OlBackend(OlBackend) {}
+
+  void set_backend(ol_platform_backend_t B) { OlBackend = B; }
 
   // Platforms for this backend
   range_view<ol_platform_handle_t> platforms() const {

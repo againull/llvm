@@ -20,12 +20,12 @@ namespace detail {
 void discoverOflloadDevices(OffloadDispatcher &Dispatcher) {
   static std::once_flag DiscoverOnce;
   std::call_once(DiscoverOnce, [&]() {
-    std::unordered_map<ol_platform_backend_t, Topology> BackendTopoMap;
+    auto &BackendTopologies = GlobalHandler::instance().getOffloadTopologies();
 
     struct CBData {
-      decltype(BackendTopoMap) *BeMap;
+      decltype(&BackendTopologies) BeArr;
       OffloadDispatcher *Dispatcher;
-    } CB{&BackendTopoMap, &Dispatcher};
+    } CB{&BackendTopologies, &Dispatcher};
     std::cout << "Calling olIterateDevices\n";
     Dispatcher.call_nocheck<OlApiKind::olIterateDevices>(
         [](ol_device_handle_t Dev, void *User) -> bool {
@@ -49,21 +49,17 @@ void discoverOflloadDevices(OffloadDispatcher &Dispatcher) {
 
           // TODO: skip banned platforms
 
-          auto [it, _] = D->BeMap->try_emplace(OlBackend, Topology(OlBackend));
-          Topology &Topo = it->second;
+          // Ensure backend index fits into array size
+          if (OlBackend >= OL_PLATFORM_BACKEND_LAST)
+            return true;
+          Topology &Topo = (*D->BeArr)[static_cast<size_t>(OlBackend)];
+          Topo.set_backend(OlBackend);
 
           // Register the platform and device into the topology.
           Topo.register_platform_device(Plat, Dev);
           return true;
         },
         &CB);
-
-    std::vector<Topology> &BackendTopologies =
-        GlobalHandler::instance().getOffloadTopologies();
-    // Move accumulated topologies into the vector in global handler.
-    BackendTopologies.reserve(BackendTopoMap.size());
-    for (auto &BackendTopo : BackendTopoMap)
-      BackendTopologies.push_back(std::move(BackendTopo.second));
   });
 }
 

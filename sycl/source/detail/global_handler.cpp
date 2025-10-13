@@ -220,8 +220,10 @@ detail::OffloadDispatcher &GlobalHandler::getOffloadDispatcher() {
   return Disp;
 }
 
-std::vector<detail::Topology> &GlobalHandler::getOffloadTopologies() {
-  static std::vector<detail::Topology> &Topos = getOrCreate(MOffloadTopologies);
+std::array<detail::Topology, OL_PLATFORM_BACKEND_LAST> &
+GlobalHandler::getOffloadTopologies() {
+  static std::array<detail::Topology, OL_PLATFORM_BACKEND_LAST> &Topos =
+      getOrCreate(MOffloadTopologies);
   return Topos;
 }
 

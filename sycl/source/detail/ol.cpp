@@ -57,10 +57,13 @@ OffloadDispatcher &initializeLibOffload() {
 
 // Get the topology for the given backend.
 Topology &getBackendTopology(backend BE) {
-  for (auto &T : GlobalHandler::instance().getOffloadTopologies())
-    if (convertOlBackend(T.backend()) == BE) {
-      return T;
-    }
+  // Topologies are indexed by ol_platform_backend_t, which matches
+  // backend enum values for all supported backends.
+  auto &BackendTopologies = GlobalHandler::instance().getOffloadTopologies();
+  size_t BEIdx = static_cast<size_t>(BE);
+  if (BEIdx < BackendTopologies.size() &&
+      BackendTopologies[BEIdx].backend() != OL_PLATFORM_BACKEND_UNKNOWN)
+    return BackendTopologies[BEIdx];
 
   throw exception(errc::runtime, "Couldn't find topology for backend");
 }

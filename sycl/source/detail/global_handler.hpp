@@ -81,7 +81,8 @@ public:
   std::vector<adapter_impl *> &getAdapters();
   OffloadDispatcher &getOffloadDispatcher();
   // Offload topologies (one per backend) discovered from liboffload.
-  std::vector<detail::Topology> &getOffloadTopologies();
+  std::array<detail::Topology, OL_PLATFORM_BACKEND_LAST> &
+  getOffloadTopologies();
   ods_target_list &getOneapiDeviceSelectorTargets(const std::string &InitValue);
   XPTIRegistry &getXPTIRegistry();
   ThreadPool &getHostTaskThreadPool();
@@ -138,7 +139,8 @@ private:
   InstWithLock<detail::OffloadDispatcher> MOffloadDispatcher;
   InstWithLock<ods_target_list> MOneapiDeviceSelectorTargets;
   InstWithLock<XPTIRegistry> MXPTIRegistry;
-  InstWithLock<std::vector<detail::Topology>> MOffloadTopologies;
+  InstWithLock<std::array<detail::Topology, OL_PLATFORM_BACKEND_LAST>>
+      MOffloadTopologies;
   // Thread pool for host task and event callbacks execution
   InstWithLock<ThreadPool> MHostTaskThreadPool;
 #ifndef __INTEL_PREVIEW_BREAKING_CHANGES
