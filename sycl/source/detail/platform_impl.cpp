@@ -195,8 +195,8 @@ std::vector<platform> platform_impl::getAdapterPlatforms(adapter_impl &Adapter,
 
 std::vector<platform> platform_impl::get_platforms() {
   ol::initializeLibOffload();
-  auto &Dispatcher = GlobalHandler::instance().getOffloadDispatcher();
-  discoverOflloadDevices(Dispatcher);
+  auto &Dispatcher = GlobalHandler::instance().getOffloadLib();
+  discoverOffloadDevices(Dispatcher);
   std::vector<platform> Platforms;
   for (const auto &Topo : GlobalHandler::instance().getOffloadTopologies()) {
     size_t PlatformIndex = 0;
@@ -272,12 +272,12 @@ platform_impl::getFilteredDevices(ol_device_type_t DeviceType,
   std::vector<ol_device_handle_t> OlDevices;
 
   // Find topology for this backend
-  const Topology &Topo = ol::getBackendTopology(MOlBackend);
+  const OffloadTopology &Topo = ol::getOffloadTopology(MOlBackend);
   int DeviceNum =
-      Topo.get_first_device_index_for_platform(getOlPlatformIndex());
-  for (ol_device_handle_t Dev : Topo.devices_for_platform(getOlPlatformIndex())) {
+      Topo.getFirstDeviceIndexForPlatform(getOlPlatformIndex());
+  for (ol_device_handle_t Dev : Topo.devicesForPlatform(getOlPlatformIndex())) {
     ol_device_type_t OlDevType = OL_DEVICE_TYPE_ALL;
-    auto &OffloadLib = GlobalHandler::instance().getOffloadDispatcher();
+    auto &OffloadLib = GlobalHandler::instance().getOffloadLib();
     OffloadLib.call<OlApiKind::olGetDeviceInfo>(
         Dev, OL_DEVICE_INFO_TYPE, sizeof(ol_device_type_t), &OlDevType);
     // Filter by device type

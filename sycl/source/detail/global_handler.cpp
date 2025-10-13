@@ -215,14 +215,14 @@ std::vector<adapter_impl *> &GlobalHandler::getAdapters() {
   return adapters;
 }
 
-detail::OffloadDispatcher &GlobalHandler::getOffloadDispatcher() {
-  static detail::OffloadDispatcher &Disp = getOrCreate(MOffloadDispatcher);
+detail::OffloadLib &GlobalHandler::getOffloadLib() {
+  static detail::OffloadLib &Disp = getOrCreate(MOffloadLib);
   return Disp;
 }
 
-std::array<detail::Topology, OL_PLATFORM_BACKEND_LAST> &
+std::array<detail::OffloadTopology, OL_PLATFORM_BACKEND_LAST> &
 GlobalHandler::getOffloadTopologies() {
-  static std::array<detail::Topology, OL_PLATFORM_BACKEND_LAST> &Topos =
+  static std::array<detail::OffloadTopology, OL_PLATFORM_BACKEND_LAST> &Topos =
       getOrCreate(MOffloadTopologies);
   return Topos;
 }

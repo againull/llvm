@@ -34,7 +34,7 @@ inline namespace _V1 {
 namespace detail {
 namespace ol {
 
-OffloadDispatcher &initializeLibOffload() {
+OffloadLib &initializeLibOffload() {
   // This uses static variable initialization to work around a gcc bug with
   // std::call_once and exceptions.
   // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=66146
@@ -52,16 +52,13 @@ OffloadDispatcher &initializeLibOffload() {
   };
   static bool Initialized = initializeHelper();
   (void)Initialized;
-  return GlobalHandler::instance().getOffloadDispatcher();
+  return GlobalHandler::instance().getOffloadLib();
 }
 
 // Get the topology for the given backend.
-Topology &getBackendTopology(ol_platform_backend_t BE) {
-  // Topologies are indexed by ol_platform_backend_t, which matches
-  // backend enum values for all supported backends.
+OffloadTopology &getOffloadTopology(ol_platform_backend_t BE) {
   auto &BackendTopologies = GlobalHandler::instance().getOffloadTopologies();
   size_t BEIdx = static_cast<size_t>(BE);
-  std::cout << "BEIdx: " << BEIdx << "\n";
   if (BEIdx < BackendTopologies.size() &&
       BackendTopologies[BEIdx].backend() != OL_PLATFORM_BACKEND_UNKNOWN)
     return BackendTopologies[BEIdx];
@@ -69,8 +66,8 @@ Topology &getBackendTopology(ol_platform_backend_t BE) {
   throw exception(errc::runtime, "Couldn't find topology for backend");
 }
 
-OffloadDispatcher &getOffloadDispatcher() {
-  return GlobalHandler::instance().getOffloadDispatcher();
+OffloadLib &getOffloadLib() {
+  return GlobalHandler::instance().getOffloadLib();
 }
 
 } // namespace ol

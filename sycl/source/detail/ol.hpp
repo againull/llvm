@@ -30,15 +30,15 @@ class adapter_impl;
 namespace ol {
 void *getLiboffloadLibrary();
 
-OffloadDispatcher &initializeLibOffload();
+OffloadLib &initializeLibOffload();
 
 // Get the adapter serving given backend.
 template <backend BE> adapter_impl &getAdapter();
 
-OffloadDispatcher &getOffloadDispatcher();
+OffloadLib &getOffloadLib();
 
 // Get the topology for given backend.
-Topology &getBackendTopology(ol_platform_backend_t BE);
+OffloadTopology &getOffloadTopology(ol_platform_backend_t BE);
 } // namespace ol
 
 // Convert from Liboffload backend to SYCL backend enum
@@ -47,7 +47,7 @@ backend convertOlBackend(ol_platform_backend_t OlBackend);
 template <auto ApiKind, typename SyclImplTy, typename DescTy>
 std::string olGetInfoString(SyclImplTy &SyclImpl, DescTy Desc) {
   // Avoid explicit type to keep template-type-dependent.
-  auto &Offload = ol::getOffloadDispatcher();
+  auto &Offload = ol::getOffloadLib();
   size_t ResultSize = 0;
   auto Handle = SyclImpl.getOlHandleRef();
   Offload.template call<ApiKind>(Handle, Desc,

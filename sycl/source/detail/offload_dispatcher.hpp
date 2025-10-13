@@ -11,9 +11,9 @@ namespace sycl {
 inline namespace _V1 {
 namespace detail {
 
-class OffloadDispatcher {
+class OffloadLib {
 public:
-  OffloadDispatcher() { populate(); }
+  OffloadLib() { populate(); }
 
   // Populate the dispatch table (nop for compile-time
   // binding)

@@ -32,7 +32,7 @@ class adapter_impl;
 class ods_target_list;
 class XPTIRegistry;
 class ThreadPool;
-class OffloadDispatcher;
+class OffloadLib;
 #ifndef __INTEL_PREVIEW_BREAKING_CHANGES
 struct KernelNameBasedCacheT;
 class DeviceKernelInfo;
@@ -79,9 +79,9 @@ public:
   std::mutex &getPlatformMapMutex();
   std::mutex &getFilterMutex();
   std::vector<adapter_impl *> &getAdapters();
-  OffloadDispatcher &getOffloadDispatcher();
+  OffloadLib &getOffloadLib();
   // Offload topologies (one per backend) discovered from liboffload.
-  std::array<detail::Topology, OL_PLATFORM_BACKEND_LAST> &
+  std::array<detail::OffloadTopology, OL_PLATFORM_BACKEND_LAST> &
   getOffloadTopologies();
   ods_target_list &getOneapiDeviceSelectorTargets(const std::string &InitValue);
   XPTIRegistry &getXPTIRegistry();
@@ -136,10 +136,10 @@ private:
   InstWithLock<std::mutex> MPlatformMapMutex;
   InstWithLock<std::mutex> MFilterMutex;
   InstWithLock<std::vector<adapter_impl *>> MAdapters;
-  InstWithLock<detail::OffloadDispatcher> MOffloadDispatcher;
+  InstWithLock<detail::OffloadLib> MOffloadLib;
   InstWithLock<ods_target_list> MOneapiDeviceSelectorTargets;
   InstWithLock<XPTIRegistry> MXPTIRegistry;
-  InstWithLock<std::array<detail::Topology, OL_PLATFORM_BACKEND_LAST>>
+  InstWithLock<std::array<detail::OffloadTopology, OL_PLATFORM_BACKEND_LAST>>
       MOffloadTopologies;
   // Thread pool for host task and event callbacks execution
   InstWithLock<ThreadPool> MHostTaskThreadPool;

@@ -17,7 +17,7 @@ namespace sycl {
 inline namespace _V1 {
 namespace detail {
 
-void discoverOflloadDevices(OffloadDispatcher &Dispatcher) {
+void discoverOffloadDevices(OffloadLib &Dispatcher) {
   static std::once_flag DiscoverOnce;
   std::call_once(DiscoverOnce, [&]() {
     std::array<std::unordered_map<ol_platform_handle_t,
@@ -25,7 +25,7 @@ void discoverOflloadDevices(OffloadDispatcher &Dispatcher) {
                OL_PLATFORM_BACKEND_LAST>
         Mapping;
     struct CBData {
-      OffloadDispatcher *Dispatcher;
+      OffloadLib *Dispatcher;
       decltype(Mapping) *MappingPtr;
     } CB{&Dispatcher, &Mapping};
     Dispatcher.call_nocheck<OlApiKind::olIterateDevices>(
@@ -59,12 +59,12 @@ void discoverOflloadDevices(OffloadDispatcher &Dispatcher) {
         },
         &CB);
     // Now register all platforms and devices into the topologies
-    auto &BackendTopologies = GlobalHandler::instance().getOffloadTopologies();
+    auto &OffloadTopologies = GlobalHandler::instance().getOffloadTopologies();
     for (size_t I = 0; I < OL_PLATFORM_BACKEND_LAST; ++I) {
-      Topology &Topo = BackendTopologies[I];
+      OffloadTopology &Topo = OffloadTopologies[I];
       Topo.set_backend(static_cast<ol_platform_backend_t>(I));
       for (auto &PltAndDevs : Mapping[I])
-        Topo.register_new_platform_and_devices(PltAndDevs.first,
+        Topo.registerNewPlatformAndDevices(PltAndDevs.first,
                                                std::move(PltAndDevs.second));
     }
   });

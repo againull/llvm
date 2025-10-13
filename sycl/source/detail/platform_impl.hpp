@@ -56,7 +56,7 @@ class platform_impl : public std::enable_shared_from_this<platform_impl> {
   explicit platform_impl(ol_platform_handle_t APlatform, size_t APlatformIndex)
       : MOlPlatform(APlatform), MOlPlatformIndex(APlatformIndex) {
     // Find out backend of the platform
-    auto &Offload = GlobalHandler::instance().getOffloadDispatcher();
+    auto &Offload = GlobalHandler::instance().getOffloadLib();
     ol_platform_backend_t OlBackend = OL_PLATFORM_BACKEND_UNKNOWN;
     Offload.call<OlApiKind::olGetPlatformInfo>(
         APlatform, OL_PLATFORM_INFO_BACKEND, sizeof(OlBackend), &OlBackend);

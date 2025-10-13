@@ -24,7 +24,7 @@ namespace sycl {
 inline namespace _V1 {
 namespace detail {
 
-class OffloadDispatcher;
+class OffloadLib;
 
 // Minimal span-like view
 template <class T> struct range_view {
@@ -36,14 +36,15 @@ template <class T> struct range_view {
   size_t size() const { return len; }
 };
 
-struct Range {
-  uint32_t begin = 0, count = 0;
-};
 
-// Contiguous global storage of platform and device handles for a backend.
-struct Topology {
-  Topology() : OlBackend(OL_PLATFORM_BACKEND_UNKNOWN) {}
-  Topology(ol_platform_backend_t OlBackend) : OlBackend(OlBackend) {}
+// Contiguous global storage of platform handlers and device handles (grouped by platform) for a backend.
+struct OffloadTopology {
+  OffloadTopology() : OlBackend(OL_PLATFORM_BACKEND_UNKNOWN) {}
+  OffloadTopology(ol_platform_backend_t OlBackend) : OlBackend(OlBackend) {}
+
+  struct Range {
+    uint32_t Begin = 0, Count = 0;
+  };
 
   void set_backend(ol_platform_backend_t B) { OlBackend = B; }
 
@@ -54,33 +55,28 @@ struct Topology {
 
   // Devices for a specific platform (platform_id is index into Platforms)
   range_view<ol_device_handle_t>
-  devices_for_platform(size_t platform_id) const {
-    if (platform_id >= PlatformDevices.size())
+  devicesForPlatform(size_t PlatformId) const {
+    if (PlatformId >= PlatformDevices.size())
       return {nullptr, 0};
-    const auto r = PlatformDevices[platform_id];
-    return {Devices.data() + r.begin, r.count};
+    const auto R = PlatformDevices[PlatformId];
+    return {Devices.data() + R.Begin, R.Count};
   }
 
-  size_t get_first_device_index_for_platform(size_t platform_id) const {
-    assert(platform_id < PlatformDevices.size());
-    const auto r = PlatformDevices[platform_id];
-    return r.begin;
-  }
-
-  // All devices for this backend (consecutive across platforms)
-  range_view<ol_device_handle_t> devices() const {
-    return {Devices.data(), Devices.size()};
+  size_t getFirstDeviceIndexForPlatform(size_t PlatformId) const {
+    assert(PlatformId < PlatformDevices.size());
+    const auto R = PlatformDevices[PlatformId];
+    return R.Begin;
   }
 
   // Register new platform and devices into this topology under that platform.
   void
-  register_new_platform_and_devices(ol_platform_handle_t NewPlatform,
+  registerNewPlatformAndDevices(ol_platform_handle_t NewPlatform,
                                     std::vector<ol_device_handle_t> &&NewDevs) {
     Platforms.push_back(NewPlatform);
 
     Range R;
-    R.begin = Devices.size();
-    R.count = NewDevs.size();
+    R.Begin = Devices.size();
+    R.Count = NewDevs.size();
     Devices.insert(Devices.end(), NewDevs.begin(), NewDevs.end());
     PlatformDevices.push_back(R);
   }
@@ -102,7 +98,7 @@ private:
 };
 
 // Initialize the topologies by calling olIterateDevices.
-void discoverOflloadDevices(class OffloadDispatcher &Dispatcher);
+void discoverOffloadDevices(class OffloadLib &Dispatcher);
 
 } // namespace detail
 } // namespace _V1
