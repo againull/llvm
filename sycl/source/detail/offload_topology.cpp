@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "offload_topology.hpp"
-#include "offload_dispatcher.hpp"
+#include "offload_lib.hpp"
 #include <detail/global_handler.hpp>
 #include <mutex>
 #include <sycl/detail/ol.hpp>

@@ -36,6 +36,7 @@ void *getOsLibraryFuncAddress(void *Library, const std::string &FunctionName) {
 }
 
 void *getURLoaderLibrary() { return nullptr; }
+
 } // namespace detail::ur
 
 namespace detail::ol {

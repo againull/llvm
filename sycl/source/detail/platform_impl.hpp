@@ -9,7 +9,7 @@
 #pragma once
 
 #include <detail/adapter_impl.hpp>
-#include <detail/offload_dispatcher.hpp>
+#include <detail/offload_lib.hpp>
 #include <detail/ol.hpp>
 #include <detail/split_string.hpp>
 #include <detail/ur.hpp>

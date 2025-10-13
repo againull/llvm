@@ -10,7 +10,7 @@
 #include <detail/config.hpp>
 #include <detail/device_impl.hpp>
 #include <detail/global_handler.hpp>
-#include <detail/offload_dispatcher.hpp>
+#include <detail/offload_lib.hpp>
 #include <detail/offload_topology.hpp>
 #include <detail/ol.hpp>
 #include <detail/platform_impl.hpp>

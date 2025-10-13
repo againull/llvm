@@ -14,7 +14,7 @@
 
 #include "ol.hpp"
 #include <detail/global_handler.hpp>
-#include <detail/offload_dispatcher.hpp>
+#include <detail/offload_lib.hpp>
 #include <offload/OffloadAPI.h>
 #include <sycl/detail/common.hpp>
 #include <sycl/detail/ol.hpp>
