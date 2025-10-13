@@ -38,7 +38,7 @@ template <backend BE> adapter_impl &getAdapter();
 OffloadDispatcher &getOffloadDispatcher();
 
 // Get the topology for given backend.
-Topology &getBackendTopology(backend BE);
+Topology &getBackendTopology(ol_platform_backend_t BE);
 } // namespace ol
 
 // Convert from Liboffload backend to SYCL backend enum

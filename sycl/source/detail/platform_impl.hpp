@@ -61,6 +61,7 @@ class platform_impl : public std::enable_shared_from_this<platform_impl> {
     Offload.call<OlApiKind::olGetPlatformInfo>(
         APlatform, OL_PLATFORM_INFO_BACKEND, sizeof(OlBackend), &OlBackend);
     MBackend = convertOlBackend(OlBackend);
+    MOlBackend = OlBackend;
   }
 
   ~platform_impl() = default;
@@ -266,6 +267,7 @@ private:
   ol_platform_handle_t MOlPlatform = 0;
   size_t MOlPlatformIndex = 0;
   backend MBackend;
+  ol_platform_backend_t MOlBackend = OL_PLATFORM_BACKEND_UNKNOWN;
 
   adapter_impl *MAdapter;
 

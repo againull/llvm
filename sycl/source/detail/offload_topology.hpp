@@ -14,6 +14,8 @@
 #include <vector>
 
 #include <algorithm>
+#include <cassert>
+#include <iostream>
 #include <optional>
 #include <sycl/detail/ol.hpp>
 #include <unordered_map>
@@ -34,9 +36,6 @@ template <class T> struct range_view {
   size_t size() const { return len; }
 };
 
-using PlatformId = uint32_t;
-using DeviceId = uint32_t;
-
 struct Range {
   uint32_t begin = 0, count = 0;
 };
@@ -55,16 +54,17 @@ struct Topology {
 
   // Devices for a specific platform (platform_id is index into Platforms)
   range_view<ol_device_handle_t>
-  devices_for_platform(uint32_t platform_id) const {
+  devices_for_platform(size_t platform_id) const {
     if (platform_id >= PlatformDevices.size())
       return {nullptr, 0};
     const auto r = PlatformDevices[platform_id];
     return {Devices.data() + r.begin, r.count};
   }
 
-  range_view<ol_device_handle_t>
-  devices_for_platform(ol_platform_handle_t platform) const {
-    return devices_for_platform(PlatformIndex.at(platform));
+  size_t get_first_device_index_for_platform(size_t platform_id) const {
+    assert(platform_id < PlatformDevices.size());
+    const auto r = PlatformDevices[platform_id];
+    return r.begin;
   }
 
   // All devices for this backend (consecutive across platforms)
@@ -72,51 +72,17 @@ struct Topology {
     return {Devices.data(), Devices.size()};
   }
 
-  // Map backend-local device ordinal -> handle (0..Devices.size()-1)
-  ol_device_handle_t device_by_ord(uint32_t ord) const {
-    if (ord >= Devices.size())
-      return nullptr;
-    return Devices[ord];
-  }
+  // Register new platform and devices into this topology under that platform.
+  void
+  register_new_platform_and_devices(ol_platform_handle_t NewPlatform,
+                                    std::vector<ol_device_handle_t> &&NewDevs) {
+    Platforms.push_back(NewPlatform);
 
-  // Map device handle -> backend-local device ordinal (0..Devices.size()-1)
-  // Linear search - only use during topology construction.
-  int get_device_global_index(ol_device_handle_t H) const {
-    auto It = DeviceIndex.find(H);
-    if (It == DeviceIndex.end())
-      return -1;
-    return static_cast<int>(It->second);
-  }
-
-  std::optional<uint32_t> platform_index(ol_platform_handle_t H) const {
-    auto It = PlatformIndex.find(H);
-    if (It == PlatformIndex.end())
-      return std::nullopt;
-    return It->second;
-  }
-
-  // Register a platform and device into this topology. If the platform is
-  // new, it will be added and its device range initialized. The device is
-  // appended to the backend-local Devices vector and the per-platform count
-  // is updated.
-  void register_platform_device(ol_platform_handle_t Plt,
-                                ol_device_handle_t Dev) {
-    auto It = PlatformIndex.find(Plt);
-    uint32_t PltIdx;
-    if (It == PlatformIndex.end()) {
-      PltIdx = static_cast<uint32_t>(Platforms.size());
-      Platforms.push_back(Plt);
-      // Device range for the new platform starts at current devices size
-      PlatformDevices.push_back({static_cast<uint32_t>(Devices.size()), 0});
-      PlatformIndex.emplace(Plt, PltIdx);
-    } else {
-      PltIdx = It->second;
-    }
-
-    uint32_t DevIdx = static_cast<uint32_t>(Devices.size());
-    Devices.push_back(Dev);
-    DeviceIndex.emplace(Dev, DevIdx);
-    PlatformDevices[PltIdx].count++;
+    Range R;
+    R.begin = Devices.size();
+    R.count = NewDevs.size();
+    Devices.insert(Devices.end(), NewDevs.begin(), NewDevs.end());
+    PlatformDevices.push_back(R);
   }
 
   ol_platform_backend_t backend() { return OlBackend; }
@@ -133,11 +99,6 @@ private:
   // within Platforms)
   std::vector<Range>
       PlatformDevices; // PlatformDevices.size() == Platforms.size()
-
-  // Map platform handle -> platform index
-  std::unordered_map<ol_platform_handle_t, uint32_t> PlatformIndex;
-  // Map device handle -> backend-local device index
-  std::unordered_map<ol_device_handle_t, uint32_t> DeviceIndex;
 };
 
 // Initialize the topologies by calling olIterateDevices.

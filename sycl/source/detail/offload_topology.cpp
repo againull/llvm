@@ -20,13 +20,14 @@ namespace detail {
 void discoverOflloadDevices(OffloadDispatcher &Dispatcher) {
   static std::once_flag DiscoverOnce;
   std::call_once(DiscoverOnce, [&]() {
-    auto &BackendTopologies = GlobalHandler::instance().getOffloadTopologies();
-
+    std::array<std::unordered_map<ol_platform_handle_t,
+                                  std::vector<ol_device_handle_t>>,
+               OL_PLATFORM_BACKEND_LAST>
+        Mapping;
     struct CBData {
-      decltype(&BackendTopologies) BeArr;
       OffloadDispatcher *Dispatcher;
-    } CB{&BackendTopologies, &Dispatcher};
-    std::cout << "Calling olIterateDevices\n";
+      decltype(Mapping) *MappingPtr;
+    } CB{&Dispatcher, &Mapping};
     Dispatcher.call_nocheck<OlApiKind::olIterateDevices>(
         [](ol_device_handle_t Dev, void *User) -> bool {
           auto *D = static_cast<CBData *>(User);
@@ -52,14 +53,20 @@ void discoverOflloadDevices(OffloadDispatcher &Dispatcher) {
           // Ensure backend index fits into array size
           if (OlBackend >= OL_PLATFORM_BACKEND_LAST)
             return true;
-          Topology &Topo = (*D->BeArr)[static_cast<size_t>(OlBackend)];
-          Topo.set_backend(OlBackend);
 
-          // Register the platform and device into the topology.
-          Topo.register_platform_device(Plat, Dev);
+          (*D->MappingPtr)[static_cast<size_t>(OlBackend)][Plat].push_back(Dev);
           return true;
         },
         &CB);
+    // Now register all platforms and devices into the topologies
+    auto &BackendTopologies = GlobalHandler::instance().getOffloadTopologies();
+    for (size_t I = 0; I < OL_PLATFORM_BACKEND_LAST; ++I) {
+      Topology &Topo = BackendTopologies[I];
+      Topo.set_backend(static_cast<ol_platform_backend_t>(I));
+      for (auto &PltAndDevs : Mapping[I])
+        Topo.register_new_platform_and_devices(PltAndDevs.first,
+                                               std::move(PltAndDevs.second));
+    }
   });
 }
 

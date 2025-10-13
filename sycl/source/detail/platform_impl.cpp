@@ -271,10 +271,10 @@ platform_impl::getFilteredDevices(ol_device_type_t DeviceType,
   std::vector<int> original_indices;
   std::vector<ol_device_handle_t> OlDevices;
 
-  auto Backend = getBackend();
   // Find topology for this backend
-  const Topology &Topo = ol::getBackendTopology(Backend);
-  int DeviceNum = 0;
+  const Topology &Topo = ol::getBackendTopology(MOlBackend);
+  int DeviceNum =
+      Topo.get_first_device_index_for_platform(getOlPlatformIndex());
   for (ol_device_handle_t Dev : Topo.devices_for_platform(getOlPlatformIndex())) {
     ol_device_type_t OlDevType = OL_DEVICE_TYPE_ALL;
     auto &OffloadLib = GlobalHandler::instance().getOffloadDispatcher();
@@ -297,7 +297,7 @@ platform_impl::getFilteredDevices(ol_device_type_t DeviceType,
       for (const FilterT &Filter : FilterList->get()) {
         backend FilterBackend = Filter.Backend.value_or(backend::all);
         // First, match the backend entry.
-        if (FilterBackend != Backend && FilterBackend != backend::all)
+        if (FilterBackend != MBackend && FilterBackend != backend::all)
           continue;
         info::device_type FilterDevType =
             Filter.DeviceType.value_or(info::device_type::all);

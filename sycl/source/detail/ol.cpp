@@ -56,11 +56,12 @@ OffloadDispatcher &initializeLibOffload() {
 }
 
 // Get the topology for the given backend.
-Topology &getBackendTopology(backend BE) {
+Topology &getBackendTopology(ol_platform_backend_t BE) {
   // Topologies are indexed by ol_platform_backend_t, which matches
   // backend enum values for all supported backends.
   auto &BackendTopologies = GlobalHandler::instance().getOffloadTopologies();
   size_t BEIdx = static_cast<size_t>(BE);
+  std::cout << "BEIdx: " << BEIdx << "\n";
   if (BEIdx < BackendTopologies.size() &&
       BackendTopologies[BEIdx].backend() != OL_PLATFORM_BACKEND_UNKNOWN)
     return BackendTopologies[BEIdx];
