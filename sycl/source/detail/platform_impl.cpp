@@ -64,7 +64,7 @@ platform_impl::getOrMakePlatformImpl(ur_platform_handle_t UrPlatform,
 }
 
 platform_impl &
-platform_impl::getOrMakePlatformImpl(ol_platform_handle_t OlPlatform) {
+platform_impl::getOrMakePlatformImpl(ol_platform_handle_t OlPlatform, size_t OlPlatformIndex) {
   std::shared_ptr<platform_impl> Result;
   {
     const std::lock_guard<std::mutex> Guard(
@@ -82,9 +82,9 @@ platform_impl::getOrMakePlatformImpl(ol_platform_handle_t OlPlatform) {
     // Otherwise make the impl. Our ctor/dtor are private, so std::make_shared
     // needs a bit of help...
     struct creator : platform_impl {
-      creator(ol_platform_handle_t APlatform) : platform_impl(APlatform) {}
+      creator(ol_platform_handle_t APlatform, size_t APlatformIndex) : platform_impl(APlatform, APlatformIndex) {}
     };
-    Result = std::make_shared<creator>(OlPlatform);
+    Result = std::make_shared<creator>(OlPlatform, OlPlatformIndex);
     PlatformCache.emplace_back(Result);
   }
 
@@ -199,9 +199,10 @@ std::vector<platform> platform_impl::get_platforms() {
   discoverOflloadDevices(Dispatcher);
   std::vector<platform> Platforms;
   for (const auto &Topo : GlobalHandler::instance().getOffloadTopologies()) {
+    size_t PlatformIndex = 0;
     for (const auto &OlPlatform : Topo.platforms()) {
       platform Platform = detail::createSyclObjFromImpl<platform>(
-          getOrMakePlatformImpl(OlPlatform));
+          getOrMakePlatformImpl(OlPlatform, PlatformIndex++));
       Platforms.push_back(std::move(Platform));
     }
   }
@@ -274,7 +275,7 @@ platform_impl::getFilteredDevices(ol_device_type_t DeviceType,
   // Find topology for this backend
   const Topology &Topo = ol::getBackendTopology(Backend);
   int DeviceNum = 0;
-  for (ol_device_handle_t Dev : Topo.devices_for_platform(MOlPlatform)) {
+  for (ol_device_handle_t Dev : Topo.devices_for_platform(getOlPlatformIndex())) {
     ol_device_type_t OlDevType = OL_DEVICE_TYPE_ALL;
     auto &OffloadLib = GlobalHandler::instance().getOffloadDispatcher();
     OffloadLib.call<OlApiKind::olGetDeviceInfo>(
