@@ -27,13 +27,13 @@ namespace detail {
 
 enum class OlApiKind {
 #define _OL_API(api) api,
-#include <ol_api_funcs.def>
+#include <sycl/detail/ol_api_funcs.def>
 #undef _OL_API
 };
 
 struct OlFuncPtrMapT {
 #define _OL_API(api) decltype(&::api) pfn_##api = nullptr;
-#include <ol_api_funcs.def>
+#include <sycl/detail/ol_api_funcs.def>
 #undef _OL_API
 };
 
@@ -44,7 +44,7 @@ void *GetWinProcAddress(void *module, const char *funcName);
 inline void PopulateOlFuncPtrTable(OlFuncPtrMapT *funcs, void *module) {
 #define _OL_API(api)                                                           \
   funcs->pfn_##api = (decltype(&::api))GetWinProcAddress(module, #api);
-#include <ol_api_funcs.def>
+#include <sycl/detail/ol_api_funcs.def>
 #undef _OL_API
 }
 
@@ -59,7 +59,7 @@ inline void PopulateOlFuncPtrTable(OlFuncPtrMapT *funcs, void *module) {
       return (FuncPtrT)GetWinProcAddress(module, #api);                        \
     }                                                                          \
   };
-#include <ol_api_funcs.def>
+#include <sycl/detail/ol_api_funcs.def>
 #undef _OL_API
 #else
 #define _OL_API(api)                                                           \
@@ -69,7 +69,7 @@ inline void PopulateOlFuncPtrTable(OlFuncPtrMapT *funcs, void *module) {
     constexpr inline FuncPtrT getFuncPtr(const void *) { return &api; }        \
     constexpr inline FuncPtrT getFuncPtrFromModule(void *) { return &api; }    \
   };
-#include <ol_api_funcs.def>
+#include <sycl/detail/ol_api_funcs.def>
 #undef _OL_API
 #endif
 
