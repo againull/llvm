@@ -195,9 +195,7 @@ std::vector<platform> platform_impl::getAdapterPlatforms(adapter_impl &Adapter,
 
 #ifdef USE_LIBOFFLOAD_API
 std::vector<platform> platform_impl::get_platforms() {
-  ol::initializeLibOffload();
-  auto &Dispatcher = GlobalHandler::instance().getOffloadLib();
-  discoverOffloadDevices(Dispatcher);
+  discoverOffloadDevices();
   std::vector<platform> Platforms;
   for (const auto &Topo : GlobalHandler::instance().getOffloadTopologies()) {
     size_t PlatformIndex = 0;

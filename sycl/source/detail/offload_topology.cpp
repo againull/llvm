@@ -11,13 +11,16 @@
 #include <detail/global_handler.hpp>
 #include <mutex>
 #include <sycl/detail/ol.hpp>
+#include <detail/ol.hpp>
 #include <unordered_map>
 
 namespace sycl {
 inline namespace _V1 {
 namespace detail {
 
-void discoverOffloadDevices(OffloadLib &Dispatcher) {
+void discoverOffloadDevices() {
+  ol::initializeLibOffload();
+  OffloadLib &Lib = GlobalHandler::instance().getOffloadLib();
   static std::once_flag DiscoverOnce;
   std::call_once(DiscoverOnce, [&]() {
     std::array<std::unordered_map<ol_platform_handle_t,
@@ -25,21 +28,21 @@ void discoverOffloadDevices(OffloadLib &Dispatcher) {
                OL_PLATFORM_BACKEND_LAST>
         Mapping;
     struct CBData {
-      OffloadLib *Dispatcher;
+      OffloadLib *Lib;
       decltype(Mapping) *MappingPtr;
-    } CB{&Dispatcher, &Mapping};
-    Dispatcher.call_nocheck<OlApiKind::olIterateDevices>(
+    } CB{&Lib, &Mapping};
+    Lib.call_nocheck<OlApiKind::olIterateDevices>(
         [](ol_device_handle_t Dev, void *User) -> bool {
           auto *D = static_cast<CBData *>(User);
           ol_platform_handle_t Plat = nullptr;
           ol_result_t Res =
-              D->Dispatcher->call_nocheck<OlApiKind::olGetDeviceInfo>(
+              D->Lib->call_nocheck<OlApiKind::olGetDeviceInfo>(
                   Dev, OL_DEVICE_INFO_PLATFORM, sizeof(Plat), &Plat);
           if (Res != OL_SUCCESS)
             return true; // continue
 
           ol_platform_backend_t OlBackend = OL_PLATFORM_BACKEND_UNKNOWN;
-          Res = D->Dispatcher->call_nocheck<OlApiKind::olGetPlatformInfo>(
+          Res = D->Lib->call_nocheck<OlApiKind::olGetPlatformInfo>(
               Plat, OL_PLATFORM_INFO_BACKEND, sizeof(OlBackend), &OlBackend);
           if (Res != OL_SUCCESS)
             return true; // continue

@@ -98,7 +98,7 @@ private:
 };
 
 // Initialize the topologies by calling olIterateDevices.
-void discoverOffloadDevices(class OffloadLib &Dispatcher);
+void discoverOffloadDevices();
 
 } // namespace detail
 } // namespace _V1
