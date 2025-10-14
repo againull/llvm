@@ -136,7 +136,6 @@ static constexpr bool is_std_vector_v<std::vector<T>> = true;
 
 template <ur_device_info_t Desc> static constexpr auto ur_ret_type_impl() {
   if constexpr (false) {
-    ;
   }
 #define MAP(VALUE, ...) else if constexpr (Desc == VALUE) return __VA_ARGS__{};
 #include "ur_device_info_ret_types.inc"
@@ -1266,12 +1265,9 @@ public:
   // template version is necessary to make this cacheable (cache lookup needs
   // compile-time data).
   template <aspect Aspect, bool InitializingCache = false> bool has() const {
-    // if constexpr (decltype(MCache)::has<AspectDesc<Aspect>>() &&
-    //               !InitializingCache) {
-    //   return MCache.get<AspectDesc<Aspect>>();
-    // }
-    if constexpr (false) {
-      ;
+    if constexpr (decltype(MCache)::has<AspectDesc<Aspect>>() &&
+                  !InitializingCache) {
+      return MCache.get<AspectDesc<Aspect>>();
     }
 #define CASE(ASPECT) else if constexpr (Aspect == aspect::ASPECT)
     CASE(host) {
@@ -2340,8 +2336,7 @@ private:
                       UR_DEVICE_INFO_ATOMIC_64>, //
       EagerCache<InfoInitializer>,               //
       CallOnceCache<InfoInitializer,
-                    ext::oneapi::experimental::info::device::architecture>,
-                    //
+                    ext::oneapi::experimental::info::device::architecture>, //
       AspectCache<EagerCache, aspect::fp16, aspect::fp64,
                   aspect::int64_base_atomics, aspect::int64_extended_atomics,
                   aspect::ext_oneapi_atomic16>,
