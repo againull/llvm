@@ -681,11 +681,23 @@ platform_impl::get_devices(info::device_type DeviceType) const {
 }
 #endif // USE_LIBOFFLOAD_API
 
+// Some of the liboffload plugins handle ONEAPI_DEVICE_SELECTOR internally
+// and report filtered devices back to SYCL so we need to know if we should do
+// numbering/filtering ourselves or not.
+bool OneAPIDeviceSelectorHandledByBackend(backend Backend) {
+  switch (Backend) {
+  case backend::ext_oneapi_level_zero:
+    return true;
+  default:
+    return false;
+  }
+}
+
 void platform_impl::getDevicesImplHelper(ol_device_type_t OlDeviceType,
                                          std::vector<device> &OutVec) const {
   size_t InitialOutVecSize = OutVec.size();
   // Get filtered devices
-  ods_target_list *OdsTargetList = SYCLConfig<ONEAPI_DEVICE_SELECTOR>::get();
+  ods_target_list *OdsTargetList = OneAPIDeviceSelectorHandledByBackend(getBackend()) ? nullptr : SYCLConfig<ONEAPI_DEVICE_SELECTOR>::get();
   auto [OlDevices, PlatformDeviceIndices] =
       getFilteredDevices<ods_target_list, ods_target>(OlDeviceType,
                                                       OdsTargetList);
