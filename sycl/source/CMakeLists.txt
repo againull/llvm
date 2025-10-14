@@ -132,6 +132,16 @@ function(add_sycl_rt_library LIB_NAME LIB_OBJ_NAME)
     )
   endif()
 
+
+  if (USE_LIBOFFLOAD_API)
+    target_compile_options(${LIB_OBJ_NAME} PUBLIC
+      -DUSE_LIBOFFLOAD_API=1
+    )
+    target_compile_options(${LIB_NAME} PUBLIC
+      -DUSE_LIBOFFLOAD_API=1
+    )
+  endif()
+
   add_dependencies(${LIB_OBJ_NAME}
     sycl-headers
   )

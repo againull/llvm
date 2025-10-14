@@ -193,6 +193,7 @@ std::vector<platform> platform_impl::getAdapterPlatforms(adapter_impl &Adapter,
   return Platforms;
 }
 
+#ifdef USE_LIBOFFLOAD_API
 std::vector<platform> platform_impl::get_platforms() {
   ol::initializeLibOffload();
   auto &Dispatcher = GlobalHandler::instance().getOffloadLib();
@@ -208,40 +209,39 @@ std::vector<platform> platform_impl::get_platforms() {
   }
   return Platforms;
 }
-
+#else
 // This routine has the side effect of registering each platform's last device
 // id into each adapter, which is used for device counting.
-// std::vector<platform> platform_impl::get_platforms() {
-//    discover_offload_devices();
-//   // See which platform we want to be served by which adapter.
-//   // There should be just one adapter serving each backend.
-//   std::vector<adapter_impl *> &Adapters = ur::initializeUr();
-//   std::vector<std::pair<platform, adapter_impl *>> PlatformsWithAdapter;
+std::vector<platform> platform_impl::get_platforms() {
+  // See which platform we want to be served by which adapter.
+  // There should be just one adapter serving each backend.
+  std::vector<adapter_impl *> &Adapters = ur::initializeUr();
+  std::vector<std::pair<platform, adapter_impl *>> PlatformsWithAdapter;
 
-//   // Then check backend-specific adapters
-//   for (auto &Adapter : Adapters) {
-//     const auto &AdapterPlatforms = getAdapterPlatforms(*Adapter);
-//     for (const auto &P : AdapterPlatforms) {
-//       PlatformsWithAdapter.push_back({P, Adapter});
-//     }
-//   }
+  // Then check backend-specific adapters
+  for (auto &Adapter : Adapters) {
+    const auto &AdapterPlatforms = getAdapterPlatforms(*Adapter);
+    for (const auto &P : AdapterPlatforms) {
+      PlatformsWithAdapter.push_back({P, Adapter});
+    }
+  }
 
-//   // For the selected platforms register them with their adapters
-//   std::vector<platform> Platforms;
-//   for (auto &Platform : PlatformsWithAdapter) {
-//     auto &Adapter = Platform.second;
-//     std::lock_guard<std::mutex> Guard(*Adapter->getAdapterMutex());
-//     Adapter->getPlatformId(getSyclObjImpl(Platform.first)->getHandleRef());
-//     Platforms.push_back(Platform.first);
-//   }
+  // For the selected platforms register them with their adapters
+  std::vector<platform> Platforms;
+  for (auto &Platform : PlatformsWithAdapter) {
+    auto &Adapter = Platform.second;
+    std::lock_guard<std::mutex> Guard(*Adapter->getAdapterMutex());
+    Adapter->getPlatformId(getSyclObjImpl(Platform.first)->getHandleRef());
+    Platforms.push_back(Platform.first);
+  }
 
-//   // This initializes a function-local variable whose destructor is invoked
-//   as
-//   // the SYCL shared library is first being unloaded.
-//   GlobalHandler::registerStaticVarShutdownHandler();
+  // This initializes a function-local variable whose destructor is invoked as
+  // the SYCL shared library is first being unloaded.
+  GlobalHandler::registerStaticVarShutdownHandler();
 
-//   return Platforms;
-// }
+  return Platforms;
+}
+#endif // USE_LIBOFFLOAD_API
 
 // Implementation for liboffload
 template <typename ListT, typename FilterT>
@@ -608,6 +608,7 @@ static std::vector<device> amendDeviceAndSubDevices(
   return FinalResult;
 }
 
+#ifdef USE_LIBOFFLOAD_API
 std::vector<device>
 platform_impl::get_devices(info::device_type DeviceType) const {
   std::vector<device> Res;
@@ -633,52 +634,53 @@ platform_impl::get_devices(info::device_type DeviceType) const {
   getDevicesImplHelper(OlDeviceType, Res);
   return Res;
 }
+#else
+std::vector<device>
+platform_impl::get_devices(info::device_type DeviceType) const {
+  std::vector<device> Res;
+  // Host is no longer supported, so it returns an empty vector.
+  if (DeviceType == info::device_type::host)
+    return std::vector<device>{};
 
-// std::vector<device>
-// platform_impl::get_devices(info::device_type DeviceType) const {
-//   std::vector<device> Res;
-//   // Host is no longer supported, so it returns an empty vector.
-//   if (DeviceType == info::device_type::host)
-//     return std::vector<device>{};
+  // For custom devices, UR has additional type enums.
+  if (DeviceType == info::device_type::custom) {
+    getDevicesImplHelper(UR_DEVICE_TYPE_CUSTOM, Res);
+    getDevicesImplHelper(UR_DEVICE_TYPE_MCA, Res);
+    getDevicesImplHelper(UR_DEVICE_TYPE_VPU, Res);
 
-//   // For custom devices, UR has additional type enums.
-//   if (DeviceType == info::device_type::custom) {
-//     getDevicesImplHelper(UR_DEVICE_TYPE_CUSTOM, Res);
-//     getDevicesImplHelper(UR_DEVICE_TYPE_MCA, Res);
-//     getDevicesImplHelper(UR_DEVICE_TYPE_VPU, Res);
+    // Some backends may return the MCA and VPU types as part of custom, so
+    // remove duplicates.
+    std::sort(Res.begin(), Res.end(),
+              [](const sycl::device &D1, const sycl::device &D2) {
+                std::hash<sycl::device> Hasher;
+                return Hasher(D1) < Hasher(D2);
+              });
+    auto NewEnd = std::unique(Res.begin(), Res.end());
+    Res.erase(NewEnd, Res.end());
+    return Res;
+  }
 
-//     // Some backends may return the MCA and VPU types as part of custom, so
-//     // remove duplicates.
-//     std::sort(Res.begin(), Res.end(),
-//               [](const sycl::device &D1, const sycl::device &D2) {
-//                 std::hash<sycl::device> Hasher;
-//                 return Hasher(D1) < Hasher(D2);
-//               });
-//     auto NewEnd = std::unique(Res.begin(), Res.end());
-//     Res.erase(NewEnd, Res.end());
-//     return Res;
-//   }
-
-//   ur_device_type_t UrDeviceType = [DeviceType]() {
-//     switch (DeviceType) {
-//     case info::device_type::all:
-//       return UR_DEVICE_TYPE_ALL;
-//     case info::device_type::gpu:
-//       return UR_DEVICE_TYPE_GPU;
-//     case info::device_type::cpu:
-//       return UR_DEVICE_TYPE_CPU;
-//     case info::device_type::accelerator:
-//       return UR_DEVICE_TYPE_FPGA;
-//     case info::device_type::automatic:
-//       return UR_DEVICE_TYPE_DEFAULT;
-//     default:
-//       throw sycl::exception(sycl::make_error_code(sycl::errc::invalid),
-//                             "Unknown device type.");
-//     }
-//   }();
-//   getDevicesImplHelper(UrDeviceType, Res);
-//   return Res;
-// }
+  ur_device_type_t UrDeviceType = [DeviceType]() {
+    switch (DeviceType) {
+    case info::device_type::all:
+      return UR_DEVICE_TYPE_ALL;
+    case info::device_type::gpu:
+      return UR_DEVICE_TYPE_GPU;
+    case info::device_type::cpu:
+      return UR_DEVICE_TYPE_CPU;
+    case info::device_type::accelerator:
+      return UR_DEVICE_TYPE_FPGA;
+    case info::device_type::automatic:
+      return UR_DEVICE_TYPE_DEFAULT;
+    default:
+      throw sycl::exception(sycl::make_error_code(sycl::errc::invalid),
+                            "Unknown device type.");
+    }
+  }();
+  getDevicesImplHelper(UrDeviceType, Res);
+  return Res;
+}
+#endif // USE_LIBOFFLOAD_API
 
 void platform_impl::getDevicesImplHelper(ol_device_type_t OlDeviceType,
                                          std::vector<device> &OutVec) const {

@@ -222,6 +222,13 @@ def do_configure(args, passthrough_args):
             ]
         )
 
+    if args.use_liboffload_api:
+        cmake_cmd.extend(
+            [
+                "-DUSE_LIBOFFLOAD_API=ON",
+            ]
+        )
+
     if libclc_enabled:
         cmake_cmd.extend(
             [
@@ -355,6 +362,11 @@ def main():
         "--offload",
         action="store_true",
         help="Enable UR liboffload adapter (experimental)",
+    )
+    parser.add_argument(
+        "--use-liboffload-api",
+        action="store_true",
+        help="Use liboffload API in SYCL runtime (experimental, requires --offload)",
     )
     parser.add_argument(
         "--level_zero_adapter_version",

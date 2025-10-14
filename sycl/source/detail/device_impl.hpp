@@ -220,9 +220,13 @@ class device_impl : public std::enable_shared_from_this<device_impl> {
 
   template <ur_device_info_t Desc, bool InitializingCache = false>
   decltype(auto) get_info_impl() const {
-    /*     if constexpr (decltype(MCache)::has<URDesc<Desc>>() &&
-       !InitializingCache) { return MCache.get<URDesc<Desc>>(); } else  */
+#ifdef USE_LIBOFFLOAD_API
     {
+#else
+    if constexpr (decltype(MCache)::has<URDesc<Desc>>() && !InitializingCache) {
+      return MCache.get<URDesc<Desc>>();
+    } else {
+#endif // USE_LIBOFFLOAD_API
       using ur_ret_t = ur_ret_type<Desc>;
       if constexpr (std::is_same_v<ur_ret_t, std::string>) {
         return urGetInfoString<UrApiKind::urDeviceGetInfo>(*this, Desc);
@@ -359,6 +363,9 @@ class device_impl : public std::enable_shared_from_this<device_impl> {
     JointCache(device_impl &device) : Caches(device)... {}
 
     template <typename Desc> static constexpr bool has() {
+#ifdef USE_LIBOFFLOAD_API
+      return false;
+#endif
       // GCC 7.* had a bug: https://godbolt.org/z/cKeoTqMba, workaround it by
       // not performing extra checks. Builds with unaffected compilers would
       // catch all the issues.
@@ -397,6 +404,9 @@ class device_impl : public std::enable_shared_from_this<device_impl> {
   struct InfoInitializer {
     template <typename Desc>
     static void init(device_impl &device, typename Desc::return_type &value) {
+#ifdef USE_LIBOFFLOAD_API
+      return;
+#endif
       value = device.
 #ifdef __INTEL_PREVIEW_BREAKING_CHANGES
               get_info
@@ -415,6 +425,9 @@ class device_impl : public std::enable_shared_from_this<device_impl> {
   struct URInfoInitializer {
     template <typename Desc>
     static void init(device_impl &device, typename Desc::return_type &value) {
+#ifdef USE_LIBOFFLOAD_API
+      return;
+#endif
       value =
           device.get_info_impl<Desc::UR_DESC, true /* InitializingCache */>();
     }
@@ -436,6 +449,9 @@ class device_impl : public std::enable_shared_from_this<device_impl> {
   struct AspectInitializer {
     template <typename AspectDesc>
     static void init(device_impl &device, bool &value) {
+#ifdef USE_LIBOFFLOAD_API
+      return;
+#endif
       value = device.has<AspectDesc::Aspect, true /* InitializingCache */>();
     }
   };
@@ -631,13 +647,15 @@ public:
     // cache we want to be querying cached value so "false" is the right
     // template parameter for such delegation.
     [[maybe_unused]] constexpr bool DependentFalse = InitializingCache && false;
-
-    // if constexpr (decltype(MCache)::has<Param>() && !InitializingCache) {
-    //   return MCache.get<Param>();
-    // }
+#ifdef USE_LIBOFFLOAD_API
     if constexpr (false) {
       ;
     }
+#else
+    if constexpr (decltype(MCache)::has<Param>() && !InitializingCache) {
+      return MCache.get<Param>();
+    }
+#endif // USE_LIBOFFLOAD_API
 #define CASE(PARAM) else if constexpr (std::is_same_v<Param, PARAM>)
     // device_traits.def
 
@@ -2318,44 +2336,44 @@ private:
   //
   // To make an addition property cacheable just expand one of the caches below
   // with that property, no other changes should be necessary.
-  // mutable JointCache<
-  //     UREagerCache<UR_DEVICE_INFO_TYPE, UR_DEVICE_INFO_USE_NATIVE_ASSERT,
-  //                  UR_DEVICE_INFO_EXTENSIONS>, //
-  //     URCallOnceCache<UR_DEVICE_INFO_NAME,
-  //                     // USM:
-  //                     UR_DEVICE_INFO_USM_DEVICE_SUPPORT,
-  //                     UR_DEVICE_INFO_USM_HOST_SUPPORT,
-  //                     UR_DEVICE_INFO_USM_SINGLE_SHARED_SUPPORT,
-  //                     UR_DEVICE_INFO_USM_CROSS_SHARED_SUPPORT,
-  //                     UR_DEVICE_INFO_USM_SYSTEM_SHARED_SUPPORT,
-  //                     //
-  //                     UR_DEVICE_INFO_ATOMIC_64>, //
-  //     EagerCache<InfoInitializer>,               //
-  //     CallOnceCache<InfoInitializer,
-  //                   ext::oneapi::experimental::info::device::architecture>,
-  //                   //
-  //     AspectCache<EagerCache, aspect::fp16, aspect::fp64,
-  //                 aspect::int64_base_atomics, aspect::int64_extended_atomics,
-  //                 aspect::ext_oneapi_atomic16>,
-  //     AspectCache<
-  //         CallOnceCache,
-  //         // Slow, >100ns (for baseline cached ~30..40ns):
-  //         aspect::ext_intel_pci_address, aspect::ext_intel_gpu_eu_count,
-  //         aspect::ext_intel_free_memory, aspect::ext_intel_fan_speed,
-  //         aspect::ext_intel_power_limits,
-  //         // medium-slow, 60-90ns (for baseline cached ~30..40ns):
-  //         aspect::ext_intel_gpu_eu_simd_width, aspect::ext_intel_gpu_slices,
-  //         aspect::ext_intel_gpu_subslices_per_slice,
-  //         aspect::ext_intel_gpu_eu_count_per_subslice,
-  //         aspect::ext_intel_device_info_uuid,
-  //         aspect::ext_intel_gpu_hw_threads_per_eu,
-  //         aspect::ext_intel_memory_clock_rate,
-  //         aspect::ext_intel_memory_bus_width,
-  //         aspect::ext_oneapi_bindless_images,
-  //         aspect::ext_oneapi_bindless_images_1d_usm,
-  //         aspect::ext_oneapi_bindless_images_2d_usm,
-  //         aspect::ext_oneapi_is_composite, aspect::ext_oneapi_is_component>>
-  //     MCache;
+  mutable JointCache<
+      UREagerCache<UR_DEVICE_INFO_TYPE, UR_DEVICE_INFO_USE_NATIVE_ASSERT,
+                   UR_DEVICE_INFO_EXTENSIONS>, //
+      URCallOnceCache<UR_DEVICE_INFO_NAME,
+                      // USM:
+                      UR_DEVICE_INFO_USM_DEVICE_SUPPORT,
+                      UR_DEVICE_INFO_USM_HOST_SUPPORT,
+                      UR_DEVICE_INFO_USM_SINGLE_SHARED_SUPPORT,
+                      UR_DEVICE_INFO_USM_CROSS_SHARED_SUPPORT,
+                      UR_DEVICE_INFO_USM_SYSTEM_SHARED_SUPPORT,
+                      //
+                      UR_DEVICE_INFO_ATOMIC_64>, //
+      EagerCache<InfoInitializer>,               //
+      CallOnceCache<InfoInitializer,
+                    ext::oneapi::experimental::info::device::architecture>,
+                    //
+      AspectCache<EagerCache, aspect::fp16, aspect::fp64,
+                  aspect::int64_base_atomics, aspect::int64_extended_atomics,
+                  aspect::ext_oneapi_atomic16>,
+      AspectCache<
+          CallOnceCache,
+          // Slow, >100ns (for baseline cached ~30..40ns):
+          aspect::ext_intel_pci_address, aspect::ext_intel_gpu_eu_count,
+          aspect::ext_intel_free_memory, aspect::ext_intel_fan_speed,
+          aspect::ext_intel_power_limits,
+          // medium-slow, 60-90ns (for baseline cached ~30..40ns):
+          aspect::ext_intel_gpu_eu_simd_width, aspect::ext_intel_gpu_slices,
+          aspect::ext_intel_gpu_subslices_per_slice,
+          aspect::ext_intel_gpu_eu_count_per_subslice,
+          aspect::ext_intel_device_info_uuid,
+          aspect::ext_intel_gpu_hw_threads_per_eu,
+          aspect::ext_intel_memory_clock_rate,
+          aspect::ext_intel_memory_bus_width,
+          aspect::ext_oneapi_bindless_images,
+          aspect::ext_oneapi_bindless_images_1d_usm,
+          aspect::ext_oneapi_bindless_images_2d_usm,
+          aspect::ext_oneapi_is_composite, aspect::ext_oneapi_is_component>>
+      MCache;
 
 }; // class device_impl
 
