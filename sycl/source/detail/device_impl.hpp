@@ -220,13 +220,9 @@ class device_impl : public std::enable_shared_from_this<device_impl> {
 
   template <ur_device_info_t Desc, bool InitializingCache = false>
   decltype(auto) get_info_impl() const {
-#ifdef USE_LIBOFFLOAD_API
-    {
-#else
     if constexpr (decltype(MCache)::has<URDesc<Desc>>() && !InitializingCache) {
       return MCache.get<URDesc<Desc>>();
     } else {
-#endif // USE_LIBOFFLOAD_API
       using ur_ret_t = ur_ret_type<Desc>;
       if constexpr (std::is_same_v<ur_ret_t, std::string>) {
         return urGetInfoString<UrApiKind::urDeviceGetInfo>(*this, Desc);
@@ -647,15 +643,9 @@ public:
     // cache we want to be querying cached value so "false" is the right
     // template parameter for such delegation.
     [[maybe_unused]] constexpr bool DependentFalse = InitializingCache && false;
-#ifdef USE_LIBOFFLOAD_API
-    if constexpr (false) {
-      ;
-    }
-#else
     if constexpr (decltype(MCache)::has<Param>() && !InitializingCache) {
       return MCache.get<Param>();
     }
-#endif // USE_LIBOFFLOAD_API
 #define CASE(PARAM) else if constexpr (std::is_same_v<Param, PARAM>)
     // device_traits.def
 
