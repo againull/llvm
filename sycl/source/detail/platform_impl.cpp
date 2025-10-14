@@ -243,7 +243,8 @@ std::vector<platform> platform_impl::get_platforms() {
 }
 #endif // USE_LIBOFFLOAD_API
 
-// Implementation for liboffload
+// Get the platform devices filtered by device type and environment variables
+// like ONEAPI_DEVICE_SELECTOR and SYCL_DEVICE_ALLOWLIST.
 template <typename ListT, typename FilterT>
 std::pair<std::vector<ol_device_handle_t>, std::vector<int>>
 platform_impl::getFilteredDevices(ol_device_type_t DeviceType,

@@ -642,6 +642,7 @@ public:
     // cache we want to be querying cached value so "false" is the right
     // template parameter for such delegation.
     [[maybe_unused]] constexpr bool DependentFalse = InitializingCache && false;
+
     if constexpr (decltype(MCache)::has<Param>() && !InitializingCache) {
       return MCache.get<Param>();
     }
