@@ -86,16 +86,11 @@ namespace detail {
 class queue_impl;
 
 #ifndef __INTEL_PREVIEW_BREAKING_CHANGES
-using SubmitPostProcessF = std::function<void(bool, bool, event &)>;
-
 struct SubmissionInfoImpl;
 
 class __SYCL_EXPORT SubmissionInfo {
 public:
   SubmissionInfo();
-
-  sycl::detail::optional<SubmitPostProcessF> &PostProcessorFunc();
-  const sycl::detail::optional<SubmitPostProcessF> &PostProcessorFunc() const;
 
   std::shared_ptr<detail::queue_impl> &SecondaryQueue();
   const std::shared_ptr<detail::queue_impl> &SecondaryQueue() const;
@@ -131,13 +126,6 @@ public:
   SubmissionInfo(const detail::SubmissionInfo &SI)
       : MSecondaryQueue(SI.SecondaryQueue()), MEventMode(SI.EventMode()) {}
 
-  sycl::detail::optional<SubmitPostProcessF> &PostProcessorFunc() {
-    return MPostProcessorFunc;
-  }
-  const sycl::detail::optional<SubmitPostProcessF> &PostProcessorFunc() const {
-    return MPostProcessorFunc;
-  }
-
   std::shared_ptr<detail::queue_impl> &SecondaryQueue() {
     return MSecondaryQueue;
   }
@@ -153,7 +141,6 @@ public:
 
 private:
 #ifndef __INTEL_PREVIEW_BREAKING_CHANGES
-  optional<detail::SubmitPostProcessF> MPostProcessorFunc = std::nullopt;
   std::shared_ptr<detail::queue_impl> MSecondaryQueue = nullptr;
 #endif
   ext::oneapi::experimental::event_mode_enum MEventMode =
@@ -3817,13 +3804,6 @@ private:
   friend auto get_native(const queue &Obj)
       -> backend_return_t<BackendName, queue>;
 
-#ifndef __INTEL_PREVIEW_BREAKING_CHANGES
-#if __SYCL_USE_FALLBACK_ASSERT
-  friend event detail::submitAssertCapture(const queue &, event &,
-                                           const detail::code_location &);
-#endif
-#endif
-
   template <typename CommandGroupFunc, typename PropertiesT>
   friend void ext::oneapi::experimental::detail::submit_impl(
       const queue &Q, PropertiesT Props, CommandGroupFunc &&CGF,
@@ -3863,22 +3843,6 @@ private:
   void submit_without_event_impl(std::function<void(handler &)> CGH,
                                  const detail::code_location &CodeLoc,
                                  bool IsTopCodeLoc);
-  event
-  submit_impl_and_postprocess(std::function<void(handler &)> CGH,
-                              const detail::code_location &CodeLoc,
-                              const detail::SubmitPostProcessF &PostProcess);
-  event submit_impl_and_postprocess(
-      std::function<void(handler &)> CGH, const detail::code_location &CodeLoc,
-      const detail::SubmitPostProcessF &PostProcess, bool IsTopCodeLoc);
-  event
-  submit_impl_and_postprocess(std::function<void(handler &)> CGH,
-                              queue secondQueue,
-                              const detail::code_location &CodeLoc,
-                              const detail::SubmitPostProcessF &PostProcess);
-  event submit_impl_and_postprocess(
-      std::function<void(handler &)> CGH, queue secondQueue,
-      const detail::code_location &CodeLoc,
-      const detail::SubmitPostProcessF &PostProcess, bool IsTopCodeLoc);
 
   // Old version when `std::function` was used in place of
   // `std::function<void(handler &)>`.
