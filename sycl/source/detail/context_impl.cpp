@@ -455,8 +455,8 @@ std::optional<ur_program_handle_t> context_impl::getProgramForDevImgs(
       if (NProgs == 0)
         continue;
       // If the cache has multiple programs for the identifiers or if we have
-      // already found a program in the cache with the device_global or host
-      // pipe we cannot proceed.
+      // already found a program in the cache with the device_global we cannot
+      // proceed.
       if (NProgs > 1 || (BuildRes && NProgs == 1))
         throw sycl::exception(make_error_code(errc::invalid),
                               "More than one image exists with the " +
@@ -486,15 +486,6 @@ std::optional<ur_program_handle_t> context_impl::getProgramForDeviceGlobal(
     const device &Device, DeviceGlobalMapEntry *DeviceGlobalEntry) {
   return getProgramForDevImgs(Device, DeviceGlobalEntry->MImageIdentifiers,
                               "device_global");
-}
-/// Gets a program associated with a HostPipe Entry from the cache.
-std::optional<ur_program_handle_t>
-context_impl::getProgramForHostPipe(const device &Device,
-                                    HostPipeMapEntry *HostPipeEntry) {
-  // One HostPipe entry belongs to one Img
-  std::set<std::uintptr_t> ImgIdentifiers;
-  ImgIdentifiers.insert(HostPipeEntry->getDevBinImage()->getImageID());
-  return getProgramForDevImgs(Device, ImgIdentifiers, "host_pipe");
 }
 
 void context_impl::verifyProps(const property_list &Props) const {

@@ -113,11 +113,6 @@ public:
     NeedToEmitDeviceGlobalRegistration = true;
   }
 
-  /// Signals that emission of __sycl_host_pipe_registration type and
-  /// declaration of variable __sycl_host_pipe_registrar of this type in
-  /// integration header is required.
-  void addHostPipeRegistration() { NeedToEmitHostPipeRegistration = true; }
-
 private:
   // Kernel actual parameter descriptor.
   struct KernelParamDesc {
@@ -201,10 +196,6 @@ private:
   /// Keeps track of whether declaration of __sycl_device_global_registration
   /// type and __sycl_device_global_registrar variable are required to emit.
   bool NeedToEmitDeviceGlobalRegistration = false;
-
-  /// Keeps track of whether declaration of __sycl_host_pipe_registration
-  /// type and __sycl_host_pipe_registrar variable are required to emit.
-  bool NeedToEmitHostPipeRegistration = false;
 };
 
 class SYCLIntegrationFooter {
@@ -477,7 +468,6 @@ public:
   void handleSYCLIntelMergeAttr(Decl *D, const ParsedAttr &AL);
   void handleSYCLIntelBankBitsAttr(Decl *D, const ParsedAttr &AL);
   void handleSYCLIntelForcePow2DepthAttr(Decl *D, const ParsedAttr &AL);
-  void handleSYCLIntelPipeIOAttr(Decl *D, const ParsedAttr &AL);
   void handleSYCLIntelMaxConcurrencyAttr(Decl *D, const ParsedAttr &AL);
   void handleSYCLAddIRAttributesFunctionAttr(Decl *D, const ParsedAttr &AL);
   void handleSYCLAddIRAttributesKernelParameterAttr(Decl *D,
@@ -529,8 +519,6 @@ public:
   SYCLIntelForcePow2DepthAttr *
   mergeSYCLIntelForcePow2DepthAttr(Decl *D,
                                    const SYCLIntelForcePow2DepthAttr &A);
-  SYCLIntelPipeIOAttr *mergeSYCLIntelPipeIOAttr(Decl *D,
-                                                const SYCLIntelPipeIOAttr &A);
   SYCLIntelMaxConcurrencyAttr *
   mergeSYCLIntelMaxConcurrencyAttr(Decl *D,
                                    const SYCLIntelMaxConcurrencyAttr &A);
@@ -607,7 +595,6 @@ public:
                              const Expr *LHSZDim, const Expr *RHSXDim,
                              const Expr *RHSYDim, const Expr *RHSZDim);
 
-  void addSYCLIntelPipeIOAttr(Decl *D, const AttributeCommonInfo &CI, Expr *E);
   void addSYCLDeviceHasAttr(Decl *D, const AttributeCommonInfo &CI,
                             Expr **Exprs, unsigned Size);
   void addSYCLUsesAspectsAttr(Decl *D, const AttributeCommonInfo &CI,

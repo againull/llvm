@@ -65,8 +65,6 @@
 #define __SYCL_PROPERTY_SET_SYCL_DEVICE_GLOBALS "SYCL/device globals"
 /// PropertySetRegistry::SYCL_DEVICE_REQUIREMENTS defined in PropertySetIO.h
 #define __SYCL_PROPERTY_SET_SYCL_DEVICE_REQUIREMENTS "SYCL/device requirements"
-/// PropertySetRegistry::SYCL_HOST_PIPES defined in PropertySetIO.h
-#define __SYCL_PROPERTY_SET_SYCL_HOST_PIPES "SYCL/host pipes"
 /// PropertySetRegistry::SYCL_VIRTUAL_FUNCTIONS defined in PropertySetIO.h
 #define __SYCL_PROPERTY_SET_SYCL_VIRTUAL_FUNCTIONS "SYCL/virtual functions"
 /// PropertySetRegistry::SYCL_IMPLICIT_LOCAL_ARG defined in PropertySetIO.h

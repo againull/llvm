@@ -3178,21 +3178,6 @@ def SYCLIntelSimpleDualPort : Attr {
 }
 def : MutualExclusions<[SYCLIntelRegister, SYCLIntelSimpleDualPort]>;
 
-def SYCLIntelPipe : TypeAttr {
-  let Spellings = [GNU<"pipe">];
-  let Args = [StringArgument<"Mode">];
-  let LangOpts = [SYCLIsDevice];
-  let Documentation = [SYCLIntelPipeDocs];
-}
-
-def SYCLIntelPipeIO : InheritableAttr {
-  let Spellings = [GNU<"io_pipe_id">];
-  let Args = [ExprArgument<"ID">];
-  let LangOpts = [SYCLIsDevice, SilentlyIgnoreSYCLIsHost];
-  let Subjects = SubjectList<[Var]>;
-  let Documentation = [SYCLIntelPipeIOAttrDocs];
-}
-
 // Variadic integral arguments.
 def SYCLIntelBankBits : Attr {
   let Spellings = [CXX11<"intel", "bank_bits">];

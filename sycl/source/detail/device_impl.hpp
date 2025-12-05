@@ -809,22 +809,6 @@ public:
       return false;
     }
 
-    CASE(info::device::kernel_kernel_pipe_support) {
-      // We claim, that all Intel FPGA devices support kernel to kernel pipe
-      // feature (at least at the scope of SYCL_INTEL_data_flow_pipes
-      // extension).
-      std::string platform_name = MPlatform.get_info<info::platform::name>();
-      if (platform_name == "Intel(R) FPGA Emulation Platform for OpenCL(TM)" ||
-          platform_name == "Intel(R) FPGA SDK for OpenCL(TM)")
-        return true;
-
-      // TODO: a better way is to query for supported SPIR-V capabilities when
-      // it's started to be possible. Also, if a device's backend supports
-      // SPIR-V 1.1 (where Pipe Storage feature was defined), than it supports
-      // the feature as well.
-      return false;
-    }
-
     CASE(info::device::usm_device_allocations) {
       return static_cast<bool>(
           get_info_impl<UR_DEVICE_INFO_USM_DEVICE_SUPPORT>() &

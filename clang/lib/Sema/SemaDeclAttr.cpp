@@ -7925,9 +7925,6 @@ ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D, const ParsedAttr &AL,
   case ParsedAttr::AT_SYCLIntelForcePow2Depth:
     S.SYCL().handleSYCLIntelForcePow2DepthAttr(D, AL);
     break;
-  case ParsedAttr::AT_SYCLIntelPipeIO:
-    S.SYCL().handleSYCLIntelPipeIOAttr(D, AL);
-    break;
   case ParsedAttr::AT_SYCLIntelMaxConcurrency:
     S.SYCL().handleSYCLIntelMaxConcurrencyAttr(D, AL);
     break;

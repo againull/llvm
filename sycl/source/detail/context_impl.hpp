@@ -239,9 +239,6 @@ public:
   std::optional<ur_program_handle_t>
   getProgramForDeviceGlobal(const device &Device,
                             DeviceGlobalMapEntry *DeviceGlobalEntry);
-  /// Gets a program associated with a HostPipe Entry from the cache.
-  std::optional<ur_program_handle_t>
-  getProgramForHostPipe(const device &Device, HostPipeMapEntry *HostPipeEntry);
 
   /// Gets a program associated with Dev / Images pairs.
   std::optional<ur_program_handle_t>

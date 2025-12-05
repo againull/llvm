@@ -234,7 +234,6 @@ public:
   const PropertyRange &getDeviceRequirements() const {
     return DeviceRequirements;
   }
-  const PropertyRange &getHostPipes() const { return HostPipes; }
   const PropertyRange &getVirtualFunctions() const { return VirtualFunctions; }
   const PropertyRange &getImplicitLocalArg() const { return ImplicitLocalArg; }
   const PropertyRange &getRegisteredKernels() const {
@@ -264,7 +263,6 @@ protected:
   RTDeviceBinaryImage::PropertyRange ImportedSymbols;
   RTDeviceBinaryImage::PropertyRange DeviceGlobals;
   RTDeviceBinaryImage::PropertyRange DeviceRequirements;
-  RTDeviceBinaryImage::PropertyRange HostPipes;
   RTDeviceBinaryImage::PropertyRange VirtualFunctions;
   RTDeviceBinaryImage::PropertyRange ImplicitLocalArg;
   RTDeviceBinaryImage::PropertyRange RegisteredKernels;

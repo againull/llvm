@@ -6,10 +6,6 @@
 #include <type_traits>
 
 namespace intelfpga {
-template <unsigned ID> struct ethernet_pipe_id {
-  static constexpr unsigned id = ID;
-};
-
 template <typename T, sycl::access::address_space space,
           sycl::access::decorated is_decorated>
 void lsu_body(sycl::multi_ptr<const T, space, is_decorated> input_ptr,
@@ -35,16 +31,6 @@ void lsu_body(sycl::multi_ptr<const T, space, is_decorated> input_ptr,
   BurstCoalescedLSU::store(output_ptr, X); // output_ptr[0] = X
   PipelinedLSU::store(output_ptr + 1, Y);  // output_ptr[1] = Y
 }
-
-using ethernet_read_pipe =
-    sycl::ext::intel::kernel_readable_io_pipe<ethernet_pipe_id<0>, int, 0>;
-using ethernet_write_pipe =
-    sycl::ext::intel::kernel_writeable_io_pipe<ethernet_pipe_id<1>, int, 0>;
-
-static_assert(std::is_same_v<ethernet_read_pipe::value_type, int>);
-static_assert(std::is_same_v<ethernet_write_pipe::value_type, int>);
-static_assert(ethernet_read_pipe::min_capacity == 0);
-static_assert(ethernet_write_pipe::min_capacity == 0);
 } // namespace intelfpga
 
 int main() {
@@ -61,35 +47,6 @@ int main() {
 
   auto Acc = Buf.get_host_access();
   assert(Acc[0] == 42 && "Value mismatch");
-
-  /*Check FPGA-related device parameters*/
-  if (!Queue.get_device()
-           .get_info<sycl::info::device::kernel_kernel_pipe_support>()) {
-    std::cout << "SYCL_INTEL_data_flow_pipes not supported, skipping"
-              << std::endl;
-    return 0;
-  }
-
-  /*Check pipes interfaces*/
-  Queue.submit([&](sycl::handler &cgh) {
-    auto write_acc = Buf.get_access<sycl::access::mode::write>(cgh);
-
-    cgh.single_task<class bl_io_transfer>([=]() {
-      write_acc[0] = intelfpga::ethernet_read_pipe::read();
-      intelfpga::ethernet_write_pipe::write(write_acc[0]);
-    });
-  });
-
-  using Pipe = sycl::ext::intel::pipe<class PipeName, int>;
-  sycl::buffer<int, 1> readBuf(1);
-  Queue.submit([&](sycl::handler &cgh) {
-    cgh.single_task<class writer>([=]() {
-      bool SuccessCode = false;
-      do {
-        Pipe::write(42, SuccessCode);
-      } while (!SuccessCode);
-    });
-  });
 
   /*Check LSU interface*/
   {

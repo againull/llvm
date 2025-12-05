@@ -74,7 +74,6 @@ can be disabled by setting SYCL_DISABLE_FSYCL_SYCLHPP_WARNING macro.")
 #include <sycl/multi_ptr.hpp>
 #include <sycl/nd_item.hpp>
 #include <sycl/nd_range.hpp>
-#include <sycl/pipes.hpp>
 #include <sycl/platform.hpp>
 #include <sycl/pointers.hpp>
 #include <sycl/properties/all_properties.hpp>
@@ -94,8 +93,6 @@ can be disabled by setting SYCL_DISABLE_FSYCL_SYCLHPP_WARNING macro.")
 #include <sycl/ext/intel/experimental/fpga_mem/fpga_datapath.hpp>
 #include <sycl/ext/intel/experimental/fpga_mem/fpga_mem.hpp>
 #include <sycl/ext/intel/experimental/fpga_mem/properties.hpp>
-#include <sycl/ext/intel/experimental/pipe_properties.hpp>
-#include <sycl/ext/intel/experimental/pipes.hpp>
 #include <sycl/ext/intel/experimental/task_sequence.hpp>
 #include <sycl/ext/intel/experimental/task_sequence_properties.hpp>
 #include <sycl/ext/intel/experimental/usm_properties.hpp>
