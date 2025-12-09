@@ -1,5 +1,4 @@
-//==-- fpga_annotated_properties.hpp - SYCL properties associated with
-// annotated_arg/ptr --==//
+//==-- fpga_annotated_properties.hpp - SYCL properties associated with annotated_ptr --==//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -29,7 +28,7 @@ template <typename PropertyT, typename... Ts>
 using property_value =
     sycl::ext::oneapi::experimental::property_value<PropertyT, Ts...>;
 //===----------------------------------------------------------------------===//
-//        FPGA properties of annotated_arg/annotated_ptr
+//        FPGA properties of annotated_ptr
 //===----------------------------------------------------------------------===//
 struct register_map_key
     : oneapi::experimental::detail::compile_time_property_key<
@@ -129,7 +128,6 @@ inline constexpr read_write_mode_key::value_t<read_write_mode_enum::read_write>
 
 namespace oneapi {
 namespace experimental {
-template <typename T, typename PropertyListT> class annotated_arg;
 template <typename T, typename PropertyListT> class annotated_ptr;
 
 struct alignment_key;
@@ -144,46 +142,6 @@ using read_write_mode_key = intel::experimental::read_write_mode_key;
 using maxburst_key = intel::experimental::maxburst_key;
 using wait_request_key = intel::experimental::wait_request_key;
 using read_write_mode_enum = intel::experimental::read_write_mode_enum;
-
-template <typename T, typename PropertyListT>
-struct is_property_key_of<register_map_key, annotated_arg<T, PropertyListT>>
-    : std::true_type {};
-
-template <typename T, typename PropertyListT>
-struct is_property_key_of<conduit_key, annotated_arg<T, PropertyListT>>
-    : std::true_type {};
-
-template <typename T, typename PropertyListT>
-struct is_property_key_of<stable_key, annotated_arg<T, PropertyListT>>
-    : std::true_type {};
-
-template <typename T, typename PropertyListT>
-struct is_property_key_of<buffer_location_key, annotated_arg<T, PropertyListT>>
-    : std::true_type {};
-
-template <typename T, typename PropertyListT>
-struct is_property_key_of<awidth_key, annotated_arg<T, PropertyListT>>
-    : std::true_type {};
-
-template <typename T, typename PropertyListT>
-struct is_property_key_of<dwidth_key, annotated_arg<T, PropertyListT>>
-    : std::true_type {};
-
-template <typename T, typename PropertyListT>
-struct is_property_key_of<latency_key, annotated_arg<T, PropertyListT>>
-    : std::true_type {};
-
-template <typename T, typename PropertyListT>
-struct is_property_key_of<read_write_mode_key, annotated_arg<T, PropertyListT>>
-    : std::true_type {};
-
-template <typename T, typename PropertyListT>
-struct is_property_key_of<maxburst_key, annotated_arg<T, PropertyListT>>
-    : std::true_type {};
-
-template <typename T, typename PropertyListT>
-struct is_property_key_of<wait_request_key, annotated_arg<T, PropertyListT>>
-    : std::true_type {};
 
 template <typename T, typename PropertyListT>
 struct is_property_key_of<register_map_key, annotated_ptr<T, PropertyListT>>

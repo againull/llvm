@@ -161,13 +161,9 @@ int main() {
     c.use();
   });
 
-  sycl::ext::oneapi::experimental::annotated_arg<int, MockProperty> AA1;
   sycl::ext::oneapi::experimental::annotated_ptr<int, MockProperty> AP2;
-  sycl::ext::oneapi::experimental::annotated_arg<float*, MockProperty> AP3;
   kernel_single_task<class annotated_types>([=]() {
-    (void)AA1;
     (void)AP2;
-    (void)AP3;
   });
 
   kernel_single_task<class FinalClass>([=]() { });

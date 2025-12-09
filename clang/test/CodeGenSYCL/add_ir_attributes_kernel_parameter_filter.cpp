@@ -9,7 +9,7 @@
 #include "mock_properties.hpp"
 #include "sycl.hpp"
 
-template <typename... Properties> class __attribute__((sycl_special_class)) __SYCL_TYPE(annotated_arg) g {
+template <typename... Properties> class __attribute__((sycl_special_class)) __SYCL_TYPE(annotated_ptr) g {
 public:
   int *x;
 

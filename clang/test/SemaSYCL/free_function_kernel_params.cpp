@@ -291,19 +291,6 @@ void ff_11(sycl::stream str) {
 
 __attribute__((sycl_device))
 [[__sycl_detail__::add_ir_attributes_function("sycl-nd-range-kernel", 0)]]
-void ff_12(sycl::ext::oneapi::experimental::annotated_arg<int> arg) {
-}
-
-// CHECK: FunctionDecl {{.*}}'void (sycl::ext::oneapi::experimental::annotated_arg<int>)'
-// CHECK: ParmVarDecl {{.*}}arg 'sycl::ext::oneapi::experimental::annotated_arg<int>'
-// CHECK: FunctionDecl {{.*}}'void (int) __attribute__((device_kernel))'
-// CHECK: ParmVarDecl {{.*}}__arg__obj 'int'
-// CHECK: CXXMemberCallExpr {{.*}}
-// CHECK-NEXT: MemberExpr {{.*}}.__init
-
-
-__attribute__((sycl_device))
-[[__sycl_detail__::add_ir_attributes_function("sycl-nd-range-kernel", 0)]]
 void ff_13(sycl::ext::oneapi::experimental::annotated_ptr<int> ptr) {
 }
 

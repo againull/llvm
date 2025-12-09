@@ -1776,13 +1776,13 @@ def SYCLType: InheritableAttr {
                            "work_group_memory", "dynamic_work_group_memory",
                             "specialization_id", "kernel_handler", "buffer_location",
                             "no_alias", "accessor_property_list", "group",
-                            "private_memory", "aspect", "annotated_ptr", "annotated_arg",
+                            "private_memory", "aspect", "annotated_ptr",
                             "stream", "sampler", "host_pipe", "multi_ptr"],
                            ["accessor", "local_accessor", "dynamic_local_accessor",
                            "work_group_memory", "dynamic_work_group_memory",
                             "specialization_id", "kernel_handler", "buffer_location",
                             "no_alias", "accessor_property_list", "group",
-                            "private_memory", "aspect", "annotated_ptr", "annotated_arg",
+                            "private_memory", "aspect", "annotated_ptr",
                             "stream", "sampler", "host_pipe", "multi_ptr"]>];
   // Only used internally by SYCL implementation
   let Documentation = [InternalOnly];

@@ -187,11 +187,6 @@ void ff_13(sycl::stream str) {
 
 __attribute__((sycl_device))
 [[__sycl_detail__::add_ir_attributes_function("sycl-nd-range-kernel", 0)]]
-void ff_14(sycl::ext::oneapi::experimental::annotated_arg<int> arg) {
-}
-
-__attribute__((sycl_device))
-[[__sycl_detail__::add_ir_attributes_function("sycl-nd-range-kernel", 0)]]
 void ff_15(sycl::ext::oneapi::experimental::annotated_ptr<int> ptr) {
 }
 
@@ -301,7 +296,6 @@ void ff_24(int arg) {
 // CHECK-NEXT:   {{.*}}__sycl_kernel_ff_11IfEvN4sycl3_V114local_accessorIT_Li1EEE
 // CHECK-NEXT:   {{.*}}sycl_kernel_ff_12N4sycl3_V17samplerE
 // CHECK-NEXT:   {{.*}}sycl_kernel_ff_13N4sycl3_V16streamE
-// CHECK-NEXT:   {{.*}}sycl_kernel_ff_14N4sycl3_V13ext6oneapi12experimental13annotated_argIiJEEE
 // CHECK-NEXT:   {{.*}}sycl_kernel_ff_15N4sycl3_V13ext6oneapi12experimental13annotated_ptrIiJEEE
 // CHECK-NEXT:   {{.*}}__sycl_kernel_free_functions5tests5ff_14EiPi
 // CHECK-NEXT:   {{.*}}__sycl_kernel_free_functions5ff_15EiPi
@@ -400,9 +394,6 @@ void ff_24(int arg) {
 
 // CHECK: //--- _Z19__sycl_kernel_ff_13N4sycl3_V16streamE
 // CHECK-NEXT: { kernel_param_kind_t::kind_stream, 16, 0 },
-
-// CHECK: //--- _Z19__sycl_kernel_ff_14N4sycl3_V13ext6oneapi12experimental13annotated_argIiJEEE
-// CHECK-NEXT: { kernel_param_kind_t::kind_std_layout, 4, 0 },
 
 // CHECK: //--- _Z19__sycl_kernel_ff_15N4sycl3_V13ext6oneapi12experimental13annotated_ptrIiJEEE
 // CHECK-NEXT: { kernel_param_kind_t::kind_pointer, 8, 0 },
@@ -1113,30 +1104,6 @@ void ff_24(int arg) {
 // CHECK: template <>
 // CHECK-NEXT: struct ext::oneapi::experimental::is_single_task_kernel
 // CHECK-NEXT:  static constexpr bool value = true;
-
-// Definition of _Z19__sycl_kernel_ff_14N4sycl3_V13ext6oneapi12experimental13annotated_argIiJEEE as a free function kernel
-
-// Forward declarations of kernel and its argument types:
-// CHECK: namespace sycl { inline namespace _V1 { namespace ext { namespace oneapi { namespace experimental {
-// CHECK-NEXT: template <typename T, typename ...Props> class annotated_arg;
-
-// CHECK: void ff_14(sycl::ext::oneapi::experimental::annotated_arg<int> arg);
-// CHECK-NEXT: static constexpr auto __sycl_shim
-// CHECK-NEXT:  return (void (*)(class sycl::ext::oneapi::experimental::annotated_arg<int>))ff_14;
-
-// CHECK: namespace sycl {
-// CHECK-NEXT: inline namespace _V1 {
-// CHECK-NEXT: namespace detail {
-// CHECK-NEXT: //Free Function Kernel info specialization for shim21
-// CHECK-NEXT: template <> struct FreeFunctionInfoData<__sycl_shim21()> {
-// CHECK-NEXT: 	__SYCL_DLL_LOCAL
-// CHECK-NEXT: 	static constexpr unsigned getNumParams() { return 1; }
-// CHECK-NEXT: 	__SYCL_DLL_LOCAL
-// CHECK-NEXT: 	static constexpr const char *getFunctionName() { return "_Z19__sycl_kernel_ff_14N4sycl3_V13ext6oneapi12experimental13annotated_argIiJEEE"; }
-// CHECK-NEXT: };
-// CHECK-NEXT: } // namespace detail
-// CHECK-NEXT: } // namespace _V1
-// CHECK-NEXT: } // namespace sycl
 
 // CHECK: namespace sycl {
 // CHECK-NEXT: template <>

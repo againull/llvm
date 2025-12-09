@@ -209,21 +209,6 @@ void ff_8(sycl::stream str) {
 // CHECK-NEXT:  %0 = load ptr addrspace(1), ptr addrspace(4) %__arg_Ptr.addr.ascast, align 8
 // CHECK:  call spir_func void @{{.*}}stream{{.*}}__init{{.*}}
 
-__attribute__((sycl_device))
-[[__sycl_detail__::add_ir_attributes_function("sycl-nd-range-kernel", 0)]]
-void ff_8(sycl::ext::oneapi::experimental::annotated_arg<int> arg) {
-} 
-
-// CHECK: define dso_local spir_kernel void @{{.*}}__sycl_kernel_ff_8{{.*}}
-// CHECK:  %__arg__obj.addr = alloca i32, align 4
-// CHECK-NEXT:  %arg = alloca %"class.sycl::_V1::ext::oneapi::experimental::annotated_arg", align 4
-// CHECK-NEXT:  %agg.tmp = alloca %"class.sycl::_V1::ext::oneapi::experimental::annotated_arg", align 4
-// CHECK-NEXT:  %__arg__obj.addr.ascast = addrspacecast ptr %__arg__obj.addr to ptr addrspace(4)
-// CHECK-NEXT:  %arg.ascast = addrspacecast ptr %arg to ptr addrspace(4)
-// CHECK-NEXT:  %agg.tmp.ascast = addrspacecast ptr %agg.tmp to ptr addrspace(4)
-// CHECK-NEXT:  store i32 %__arg__obj, ptr addrspace(4) %__arg__obj.addr.ascast, align 4
-// CHECK-NEXT:  %0 = load i32, ptr addrspace(4) %__arg__obj.addr.ascast, align 4
-// CHECK-NEXT:  call spir_func void @{{.*}}annotated_arg{{.*}}__init{{.*}}
 
 __attribute__((sycl_device))
 [[__sycl_detail__::add_ir_attributes_function("sycl-nd-range-kernel", 0)]]

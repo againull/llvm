@@ -11,7 +11,7 @@
 
 // One __init parameter with add_ir_attributes_kernel_parameter attribute.
 
-template <typename... Properties> class __attribute__((sycl_special_class)) __SYCL_TYPE(annotated_arg) g {
+template <typename... Properties> class __attribute__((sycl_special_class)) __SYCL_TYPE(annotated_ptr) g {
 public:
   int *x;
 
@@ -27,7 +27,7 @@ public:
 #endif
 };
 
-class __attribute__((sycl_special_class)) __SYCL_TYPE(annotated_arg) h {
+class __attribute__((sycl_special_class)) h {
 public:
   int *x;
 
@@ -44,7 +44,7 @@ public:
 #endif
 };
 
-template <typename... Properties> class __attribute__((sycl_special_class)) __SYCL_TYPE(annotated_arg) gh {
+template <typename... Properties> class __attribute__((sycl_special_class)) __SYCL_TYPE(annotated_ptr) gh {
 public:
   int *x;
 
@@ -61,7 +61,7 @@ public:
 #endif
 };
 
-template <typename... Properties> class __attribute__((sycl_special_class)) __SYCL_TYPE(annotated_arg) hg {
+template <typename... Properties> class __attribute__((sycl_special_class)) __SYCL_TYPE(annotated_ptr) hg {
 public:
   int *x;
 
@@ -80,7 +80,7 @@ public:
 
 // Two __init parameters, one with add_ir_attributes_kernel_parameter attribute.
 
-template <typename... Properties> class __attribute__((sycl_special_class)) __SYCL_TYPE(annotated_arg) k {
+template <typename... Properties> class __attribute__((sycl_special_class)) __SYCL_TYPE(annotated_ptr) k {
 public:
   int *x;
   float *y;
@@ -99,7 +99,7 @@ public:
 #endif
 };
 
-class __attribute__((sycl_special_class)) __SYCL_TYPE(annotated_arg) l {
+class __attribute__((sycl_special_class)) l {
 public:
   int *x;
   float *y;
@@ -119,7 +119,7 @@ public:
 #endif
 };
 
-template <typename... Properties> class __attribute__((sycl_special_class)) __SYCL_TYPE(annotated_arg) kl {
+template <typename... Properties> class __attribute__((sycl_special_class)) __SYCL_TYPE(annotated_ptr) kl {
 public:
   int *x;
   float *y;
@@ -139,7 +139,7 @@ public:
 #endif
 };
 
-template <typename... Properties> class __attribute__((sycl_special_class)) __SYCL_TYPE(annotated_arg) lk {
+template <typename... Properties> class __attribute__((sycl_special_class)) __SYCL_TYPE(annotated_ptr) lk {
 public:
   int *x;
   float *y;
@@ -161,7 +161,7 @@ public:
 
 // Two __init parameters, both with add_ir_attributes_kernel_parameter attribute.
 
-template <typename... Properties> class __attribute__((sycl_special_class)) __SYCL_TYPE(annotated_arg) m {
+template <typename... Properties> class __attribute__((sycl_special_class)) __SYCL_TYPE(annotated_ptr) m {
 public:
   int *x;
   float *y;
@@ -181,7 +181,7 @@ public:
 #endif
 };
 
-class __attribute__((sycl_special_class)) __SYCL_TYPE(annotated_arg) n {
+class __attribute__((sycl_special_class)) __SYCL_TYPE(annotated_ptr) n {
 public:
   int *x;
   float *y;
@@ -203,7 +203,7 @@ public:
 #endif
 };
 
-template <typename... Properties> class __attribute__((sycl_special_class)) __SYCL_TYPE(annotated_arg) mn {
+template <typename... Properties> class __attribute__((sycl_special_class)) __SYCL_TYPE(annotated_ptr) mn {
 public:
   int *x;
   float *y;
@@ -225,7 +225,7 @@ public:
 #endif
 };
 
-template <typename... Properties> class __attribute__((sycl_special_class)) __SYCL_TYPE(annotated_arg) nm {
+template <typename... Properties> class __attribute__((sycl_special_class)) __SYCL_TYPE(annotated_ptr) nm {
 public:
   int *x;
   float *y;
@@ -249,7 +249,7 @@ public:
 
 // Empty attribute names.
 
-class __attribute__((sycl_special_class)) __SYCL_TYPE(annotated_arg) np {
+class __attribute__((sycl_special_class)) __SYCL_TYPE(annotated_ptr) np {
 public:
   int *x;
 
@@ -266,7 +266,7 @@ public:
 #endif
 };
 
-class __attribute__((sycl_special_class)) __SYCL_TYPE(annotated_arg) mp {
+class __attribute__((sycl_special_class)) __SYCL_TYPE(annotated_ptr) mp {
 public:
   int *x;
 

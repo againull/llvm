@@ -2028,10 +2028,9 @@ class SyclKernelFieldChecker : public SyclKernelFieldHandler {
     assert(isSyclSpecialType(Ty, SemaSYCLRef) &&
            "Should only be called on sycl special class types.");
 
-    // Annotated pointers and annotated arguments must be captured
+    // Annotated pointers must be captured
     // directly by the SYCL kernel.
-    if ((SemaSYCL::isSyclType(Ty, SYCLTypeAttr::annotated_ptr) ||
-         SemaSYCL::isSyclType(Ty, SYCLTypeAttr::annotated_arg)) &&
+    if ((SemaSYCL::isSyclType(Ty, SYCLTypeAttr::annotated_ptr)) &&
         (StructFieldDepth > 0 || StructBaseDepth > 0))
       return SemaSYCLRef.Diag(Loc.getBegin(),
                               diag::err_bad_kernel_param_data_members)
@@ -4900,18 +4899,18 @@ public:
       addParam(FieldTy, SYCLIntegrationHeader::kind_dynamic_work_group_memory,
                offsetOf(FD, FieldTy));
     } else if (SemaSYCL::isSyclType(FieldTy, SYCLTypeAttr::sampler) ||
-               SemaSYCL::isSyclType(FieldTy, SYCLTypeAttr::annotated_ptr) ||
-               SemaSYCL::isSyclType(FieldTy, SYCLTypeAttr::annotated_arg)) {
+               SemaSYCL::isSyclType(FieldTy, SYCLTypeAttr::annotated_ptr)) {
       CXXMethodDecl *InitMethod = getMethodByName(ClassTy, InitMethodName);
       assert(InitMethod && "type must have __init method");
       const ParmVarDecl *InitArg = InitMethod->getParamDecl(0);
       assert(InitArg && "Init method must have arguments");
       QualType T = InitArg->getType();
+      assert((SemaSYCL::isSyclType(FieldTy, SYCLTypeAttr::sampler) || T->isPointerType()) &&
+             "Annotated pointer __init method argument must be a pointer type");
       SYCLIntegrationHeader::kernel_param_kind_t ParamKind =
           SemaSYCL::isSyclType(FieldTy, SYCLTypeAttr::sampler)
               ? SYCLIntegrationHeader::kind_sampler
-              : (T->isPointerType() ? SYCLIntegrationHeader::kind_pointer
-                                    : SYCLIntegrationHeader::kind_std_layout);
+              : SYCLIntegrationHeader::kind_pointer;
       addParam(T, ParamKind, offsetOf(FD, FieldTy));
     } else {
       llvm_unreachable(
@@ -4938,18 +4937,18 @@ public:
     } else if (SemaSYCL::isSyclType(ParamTy, SYCLTypeAttr::work_group_memory)) {
       addParam(PD, ParamTy, SYCLIntegrationHeader::kind_work_group_memory);
     } else if (SemaSYCL::isSyclType(ParamTy, SYCLTypeAttr::sampler) ||
-               SemaSYCL::isSyclType(ParamTy, SYCLTypeAttr::annotated_ptr) ||
-               SemaSYCL::isSyclType(ParamTy, SYCLTypeAttr::annotated_arg)) {
+               SemaSYCL::isSyclType(ParamTy, SYCLTypeAttr::annotated_ptr)) {
       CXXMethodDecl *InitMethod = getMethodByName(ClassTy, InitMethodName);
       assert(InitMethod && "type must have __init method");
       const ParmVarDecl *InitArg = InitMethod->getParamDecl(0);
       assert(InitArg && "Init method must have arguments");
       QualType T = InitArg->getType();
+      assert((SemaSYCL::isSyclType(ParamTy, SYCLTypeAttr::sampler) || T->isPointerType()) &&
+             "Annotated pointer __init method argument must be a pointer type");
       SYCLIntegrationHeader::kernel_param_kind_t ParamKind =
           SemaSYCL::isSyclType(ParamTy, SYCLTypeAttr::sampler)
               ? SYCLIntegrationHeader::kind_sampler
-              : (T->isPointerType() ? SYCLIntegrationHeader::kind_pointer
-                                    : SYCLIntegrationHeader::kind_std_layout);
+              : SYCLIntegrationHeader::kind_pointer;
       addParam(PD, ParamTy, ParamKind);
     } else if (SemaSYCL::isSyclType(ParamTy,
                                     SYCLTypeAttr::dynamic_work_group_memory))
