@@ -9,7 +9,6 @@
 #pragma once
 #include <sycl/detail/defines_elementary.hpp>
 #include <sycl/detail/stl_type_traits.hpp>
-#include <sycl/ext/intel/experimental/fpga_annotated_properties.hpp>
 #include <sycl/ext/intel/experimental/fpga_kernel_properties.hpp>
 #include <sycl/ext/intel/experimental/fpga_lsu.hpp>
 #include <sycl/ext/intel/experimental/fpga_mem/fpga_datapath.hpp>
