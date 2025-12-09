@@ -29,7 +29,6 @@
 // CHECK-DEFAULT-SAME:,+SPV_INTEL_long_composites
 // CHECK-DEFAULT-SAME:,+SPV_INTEL_arithmetic_fence
 // CHECK-DEFAULT-SAME:,+SPV_INTEL_cache_controls
-// CHECK-DEFAULT-SAME:,+SPV_INTEL_fpga_buffer_location
 // CHECK-DEFAULT-SAME:,+SPV_INTEL_fpga_argument_interfaces
 // CHECK-DEFAULT-SAME:,+SPV_INTEL_fpga_invocation_pipelining_attributes
 // CHECK-DEFAULT-SAME:,+SPV_INTEL_fpga_latency_control
@@ -68,7 +67,6 @@
 // CHECK-CPU-SAME:,+SPV_INTEL_long_composites
 // CHECK-CPU-SAME:,+SPV_INTEL_arithmetic_fence
 // CHECK-CPU-SAME:,+SPV_INTEL_cache_controls
-// CHECK-CPU-SAME:,+SPV_INTEL_fpga_buffer_location
 // CHECK-CPU-SAME:,+SPV_INTEL_fpga_argument_interfaces
 // CHECK-CPU-SAME:,+SPV_INTEL_fpga_invocation_pipelining_attributes
 // CHECK-CPU-SAME:,+SPV_INTEL_fpga_latency_control

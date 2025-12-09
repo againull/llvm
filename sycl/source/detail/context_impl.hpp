@@ -205,9 +205,6 @@ public:
   /// \return a native handle.
   ur_native_handle_t getNative() const;
 
-  // Returns true if buffer_location property is supported by devices
-  bool isBufferLocationSupported() const;
-
   /// Adds an associated device global to the tracked associates.
   void addAssociatedDeviceGlobal(const void *DeviceGlobalPtr);
 

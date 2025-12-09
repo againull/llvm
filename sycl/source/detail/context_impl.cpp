@@ -239,20 +239,6 @@ ur_native_handle_t context_impl::getNative() const {
   return Handle;
 }
 
-bool context_impl::isBufferLocationSupported() const {
-  if (MSupportBufferLocationByDevices != NotChecked)
-    return MSupportBufferLocationByDevices == Supported ? true : false;
-  // Check that devices within context have support of buffer location
-  MSupportBufferLocationByDevices = Supported;
-  for (device_impl *Device : MDevices) {
-    if (!Device->has_extension("cl_intel_mem_alloc_buffer_location")) {
-      MSupportBufferLocationByDevices = NotSupported;
-      break;
-    }
-  }
-  return MSupportBufferLocationByDevices == Supported ? true : false;
-}
-
 void context_impl::addAssociatedDeviceGlobal(const void *DeviceGlobalPtr) {
   std::lock_guard<std::mutex> Lock{MAssociatedDeviceGlobalsMutex};
   MAssociatedDeviceGlobals.insert(DeviceGlobalPtr);

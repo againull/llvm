@@ -13373,7 +13373,7 @@ def err_sycl_invalid_accessor_property_template_param : Error<
   "sixth template parameter of the accessor must be of accessor_property_list "
   "type">;
 def err_sycl_invalid_accessor_property_list_template_param : Error<
-  "%select{accessor_property_list|accessor_property_list pack argument|buffer_location}0 "
+  "%select{accessor_property_list|accessor_property_list pack argument}0 "
   "template parameter must be a "
   "%select{parameter pack|type|non-negative integer}1">;
 def err_sycl_num_kernel_wrong_reqd_wg_size : Error<
