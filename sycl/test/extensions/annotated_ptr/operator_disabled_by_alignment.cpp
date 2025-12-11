@@ -12,8 +12,7 @@ using namespace ext::oneapi::experimental;
 using namespace ext::intel::experimental;
 
 struct MyIP {
-  annotated_ptr<int, decltype(properties(buffer_location<0>, awidth<32>,
-                                         dwidth<32>, alignment<8>))>
+  annotated_ptr<int, decltype(properties(alignment<8>))>
       a;
 
   int b;

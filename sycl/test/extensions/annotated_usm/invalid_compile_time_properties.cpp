@@ -86,32 +86,11 @@ void testInvalidCompileTimeProperty(sycl::queue &q) {
   // expected-error-re@sycl/ext/oneapi/experimental/annotated_usm/alloc_util.hpp:* {{static assertion failed due to requirement {{.+}}boo_key{{.+}}: Found invalid compile-time property in the property list.}}
   TEST(malloc_shared_annotated<int>, N, q, properties{boo<char>, register_map})
 
-  // expected-error-re@sycl/ext/oneapi/experimental/annotated_usm/alloc_util.hpp:* {{static assertion failed due to requirement {{.+}}init_mode_key{{.+}}: Found invalid compile-time property in the property list.}}
-  TEST(malloc_shared_annotated<int>, N, dev, Ctx, properties{conduit, buffer_location<1>, init_mode_reset})
-
-  // expected-error-re@sycl/ext/oneapi/experimental/annotated_usm/alloc_util.hpp:* {{static assertion failed due to requirement {{.+}}implement_in_csr_key{{.+}}: Found invalid compile-time property in the property list.}}
-  TEST(aligned_alloc_shared_annotated, 1, N, q, properties{register_map, implement_in_csr_on})
-
-  // expected-error-re@sycl/ext/oneapi/experimental/annotated_usm/alloc_util.hpp:* {{static assertion failed due to requirement {{.+}}ready_latency_key{{.+}}: Found invalid compile-time property in the property list.}}
-  TEST(aligned_alloc_shared_annotated, 1, N, dev, Ctx, properties{register_map, ready_latency<1>})
-
-  // expected-error-re@sycl/ext/oneapi/experimental/annotated_usm/alloc_util.hpp:* {{static assertion failed due to requirement {{.+}}bits_per_symbol_key{{.+}}: Found invalid compile-time property in the property list.}}
-  TEST(aligned_alloc_shared_annotated<int>, 1, N, q, properties{register_map, bits_per_symbol<1>})
-
   // expected-error-re@sycl/ext/oneapi/experimental/annotated_usm/alloc_util.hpp:* {{static assertion failed due to requirement {{.+}}pipelined_key{{.+}}: Found invalid compile-time property in the property list.}}
   TEST(aligned_alloc_shared_annotated<int>, 1, N, dev, Ctx, properties{register_map, buffer_location<1>, pipelined<1>})
 
   // expected-error-re@sycl/ext/oneapi/experimental/annotated_usm/alloc_util.hpp:* {{static assertion failed due to requirement {{.+}}sub_group_size_key{{.+}}: Found invalid compile-time property in the property list.}}
   TEST(malloc_annotated, N, q, alloc::device, properties{conduit, sub_group_size<2>})
-
-  // expected-error-re@sycl/ext/oneapi/experimental/annotated_usm/alloc_util.hpp:* {{static assertion failed due to requirement {{.+}}uses_valid_key{{.+}}: Found invalid compile-time property in the property list.}}
-  TEST(malloc_annotated, N, dev, Ctx, alloc::device, properties{buffer_location<1>, uses_valid_on})
-
-  // expected-error-re@sycl/ext/oneapi/experimental/annotated_usm/alloc_util.hpp:* {{static assertion failed due to requirement {{.+}}first_symbol_in_high_order_bits_key{{.+}}: Found invalid compile-time property in the property list.}}
-  TEST(malloc_annotated<int>, N, q, alloc::device, properties{first_symbol_in_high_order_bits_on, register_map})
-
-  // expected-error-re@sycl/ext/oneapi/experimental/annotated_usm/alloc_util.hpp:* {{static assertion failed due to requirement {{.+}}protocol_key{{.+}}: Found invalid compile-time property in the property list.}}
-  TEST(malloc_annotated<int>, N, dev, Ctx, alloc::device, properties{conduit, buffer_location<1>, protocol_avalon_streaming_uses_ready})
 
   // expected-error-re@sycl/ext/oneapi/experimental/annotated_usm/alloc_util.hpp:* {{static assertion failed due to requirement {{.+}}word_size_key{{.+}}: Found invalid compile-time property in the property list.}}
   TEST(aligned_alloc_annotated, 1, N, q, alloc::device, properties{register_map, word_size<1>})

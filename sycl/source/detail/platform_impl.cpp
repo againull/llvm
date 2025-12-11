@@ -417,6 +417,10 @@ platform_impl::get_devices(info::device_type DeviceType) const {
   if (DeviceType == info::device_type::host)
     return std::vector<device>{};
 
+  // FPGA is no longer supported, so filter it out.
+  if (DeviceType == info::device_type::accelerator)
+    return std::vector<device>{};
+
   // For custom devices, UR has additional type enums.
   if (DeviceType == info::device_type::custom) {
     getDevicesImplHelper(UR_DEVICE_TYPE_CUSTOM, Res);
@@ -442,8 +446,6 @@ platform_impl::get_devices(info::device_type DeviceType) const {
       return UR_DEVICE_TYPE_GPU;
     case info::device_type::cpu:
       return UR_DEVICE_TYPE_CPU;
-    case info::device_type::accelerator:
-      return UR_DEVICE_TYPE_FPGA;
     case info::device_type::automatic:
       return UR_DEVICE_TYPE_DEFAULT;
     default:

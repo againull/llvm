@@ -166,7 +166,7 @@ AllowListParsedT parseAllowList(const std::string &AllowListRaw) {
         // described in SyclBeMap
         ValidateEnumValues(BackendNameKeyName, getSyclBeMap());
         ValidateEnumValues(DeviceTypeKeyName,
-                           getSyclDeviceTypeMap<true /*Enable 'acc'*/>());
+                           getSyclDeviceTypeMap());
 
         if (Key == DeviceVendorIdKeyName) {
           // DeviceVendorId should have hex format
@@ -397,11 +397,16 @@ void applyAllowList(std::vector<ur_device_handle_t> &UrDevices,
     ur_device_type_t UrDevType = UR_DEVICE_TYPE_ALL;
     Adapter.call<UrApiKind::urDeviceGetInfo>(
         Device, UR_DEVICE_INFO_TYPE, sizeof(UrDevType), &UrDevType, nullptr);
+
+    // FPGA device is unsupported, filter it out.
+    if (UrDevType == UR_DEVICE_TYPE_FPGA)
+      continue;
+
     // TODO need mechanism to do these casts, there's a bunch of this sort of
     // thing
     sycl::info::device_type DeviceType = detail::ConvertDeviceType(UrDevType);
     for (const auto &SyclDeviceType :
-         getSyclDeviceTypeMap<true /*Enable 'acc'*/>()) {
+         getSyclDeviceTypeMap()) {
       if (SyclDeviceType.second == DeviceType) {
         const auto &DeviceTypeValue = SyclDeviceType.first;
         DeviceDesc[DeviceTypeKeyName] = DeviceTypeValue;
