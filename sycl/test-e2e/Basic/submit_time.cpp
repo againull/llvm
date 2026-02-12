@@ -1,7 +1,5 @@
 // RUN: %{build} -o %t.out
-// There is an issue with reported device time for the L0 backend, works only on
-// pvc for now. No such problems for other backends.
-// RUN: %if (!level_zero || arch-intel_gpu_pvc) %{ %{run} %t.out %}
+// RUN: %{run} %t.out
 
 // Check that submission time is calculated properly.
 
@@ -23,7 +21,7 @@ int main(void) {
   int *data = sycl::malloc_host<int>(n, q);
   int *dest = sycl::malloc_host<int>(n, q);
 
-  for (int i = 0; i < 5; i++) {
+  for (int i = 0; i < 5000; i++) {
     auto event = q.submit([&](sycl::handler &cgh) {
       cgh.parallel_for<class KernelTime>(
           sycl::range<1>(n), [=](sycl::id<1> idx) { data[idx] = idx; });
@@ -52,7 +50,7 @@ int main(void) {
   uint64_t memcpy_submit_time = 0;
   uint64_t memcpy_start_time = 0;
   uint64_t memcpy_end_time = 0;
-  for (int i = 0; i < 5; i++) {
+  for (int i = 0; i < 5000; i++) {
     auto memcpy_event = q.memcpy(dest, data, sizeof(int) * n);
     memcpy_event.wait();
 
