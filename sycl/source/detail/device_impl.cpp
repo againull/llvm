@@ -318,7 +318,7 @@ ur_native_handle_t device_impl::getNative() const {
 //
 // The MDeviceHostBaseTime is refreshed with new device and host timestamp
 // after a certain interval (determined by TimeTillRefresh) to account for
-// clock drift between host and device.
+// clock drift between host and device, or when overflow is detected.
 //
 uint64_t device_impl::getCurrentDeviceTime() {
   auto GetGlobalTimestamps = [this](ur_device_handle_t Device,
@@ -358,10 +358,38 @@ uint64_t device_impl::getCurrentDeviceTime() {
     }
     GetGlobalTimestamps(MDevice, &MDeviceHostBaseTime.first,
                         &MDeviceHostBaseTime.second);
+    return MDeviceHostBaseTime.first;
   } else {
     GetGlobalTimestamps(MDevice, nullptr, &HostTime);
-    assert(HostTime >= MDeviceHostBaseTime.second);
+
+    // Check for host time wraparound (overflow).
+    // If HostTime < base, the host clock has wrapped around and we need to
+    // refresh the base timestamps to get accurate device time.
+    if (HostTime < MDeviceHostBaseTime.second) {
+      ReadLock.unlock();
+      std::unique_lock<std::shared_mutex> WriteLock(MDeviceHostBaseTimeMutex);
+      // Recheck the condition after acquiring the write lock in case another
+      // thread already refreshed.
+      GetGlobalTimestamps(MDevice, nullptr, &HostTime);
+      if (HostTime < MDeviceHostBaseTime.second) {
+        GetGlobalTimestamps(MDevice, &MDeviceHostBaseTime.first,
+                            &MDeviceHostBaseTime.second);
+        return MDeviceHostBaseTime.first;
+      }
+    }
+
     Diff = HostTime - MDeviceHostBaseTime.second;
+
+    // Check if adding Diff to the base device time would overflow.
+    // Use the standard overflow check: a + b overflows if a > MAX - b
+    if (MDeviceHostBaseTime.first > UINT64_MAX - Diff) {
+      ReadLock.unlock();
+      std::unique_lock<std::shared_mutex> WriteLock(MDeviceHostBaseTimeMutex);
+      // Refresh base timestamps when overflow would occur
+      GetGlobalTimestamps(MDevice, &MDeviceHostBaseTime.first,
+                          &MDeviceHostBaseTime.second);
+      return MDeviceHostBaseTime.first;
+    }
   }
   return MDeviceHostBaseTime.first + Diff;
 }
