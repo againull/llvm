@@ -2253,6 +2253,12 @@ private:
   std::shared_mutex MDeviceHostBaseTimeMutex;
   std::pair<uint64_t, uint64_t> MDeviceHostBaseTime{0, 0};
 
+  // Adaptive timestamp refresh mechanism
+  static constexpr uint64_t MTimestampRefreshMinTimeoutNS = 1000000ULL;      // 1ms
+  static constexpr uint64_t MTimestampRefreshMaxTimeoutNS = 1000000000ULL;   // 1s
+  uint64_t MTimestampRefreshTimeoutNS = 100000000ULL;                        // 100ms (initial)
+  bool MInitialGpuTimeStamp = false;
+
   const ur_device_handle_t MRootDevice;
 
   // Devices track a list of active queues on it, to allow for synchronization
