@@ -2250,6 +2250,9 @@ private:
   // This is used for getAdapter so should be above other properties.
   platform_impl &MPlatform;
 
+  std::shared_mutex MDeviceHostBaseTimeMutex;
+  std::pair<uint64_t, uint64_t> MDeviceHostBaseTime{0, 0};
+
   const ur_device_handle_t MRootDevice;
 
   // Devices track a list of active queues on it, to allow for synchronization
