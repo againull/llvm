@@ -309,16 +309,15 @@ ur_native_handle_t device_impl::getNative() const {
   return Handle;
 }
 
-// On the first call this function queries for device timestamp
-// along with host synchronized timestamp and stores it in member variable
-// MDeviceHostBaseTime. Subsequent calls to this function would just retrieve
-// the host timestamp, compute difference against the host timestamp in
-// MDeviceHostBaseTime and calculate the device timestamp based on the
-// difference.
+// Adaptive timestamp caching mechanism to reduce expensive calls.
 //
-// The MDeviceHostBaseTime is refreshed with new device and host timestamp
-// after a certain interval (determined by TimeTillRefresh) to account for
-// clock drift between host and device.
+// This implementation uses an adaptive strategy:
+// - Caches the last actual GPU/CPU timestamp pair
+// - Estimates GPU time based on CPU elapsed time to avoid expensive backend calls
+// - Dynamically adjusts refresh interval (1ms-1s) based on prediction accuracy
+// - Refreshes when CPU elapsed time exceeds current timeout
+// - If prediction error > 5%, decreases timeout (more frequent refreshes)
+// - If prediction error <= 5%, increases timeout (less frequent refreshes)
 //
 uint64_t device_impl::getCurrentDeviceTime() {
   auto GetGlobalTimestamps = [this](ur_device_handle_t Device,
@@ -340,30 +339,148 @@ uint64_t device_impl::getCurrentDeviceTime() {
     }
   };
 
-  uint64_t HostTime = 0;
-  uint64_t Diff = 0;
-  // To account for potential clock drift between host clock and device clock.
-  // The value set is arbitrary: 200 seconds
-  constexpr uint64_t TimeTillRefresh = 200e9;
-  // If getCurrentDeviceTime is called for the first time or we have to refresh.
-  std::shared_lock<std::shared_mutex> ReadLock(MDeviceHostBaseTimeMutex);
-  if (!MDeviceHostBaseTime.second || Diff > TimeTillRefresh) {
-    ReadLock.unlock();
-    std::unique_lock<std::shared_mutex> WriteLock(MDeviceHostBaseTimeMutex);
-    // Recheck the condition after acquiring the write lock.
-    if (MDeviceHostBaseTime.second && Diff <= TimeTillRefresh) {
-      // If we are here, it means that another thread has already updated
-      // MDeviceHostBaseTime, so we can just return the current device time.
-      return MDeviceHostBaseTime.first + Diff;
-    }
-    GetGlobalTimestamps(MDevice, &MDeviceHostBaseTime.first,
-                        &MDeviceHostBaseTime.second);
+  std::unique_lock<std::shared_mutex> WriteLock(MDeviceHostBaseTimeMutex);
+
+  // Get current CPU time
+  uint64_t CurrentHostTime = 0;
+  GetGlobalTimestamps(MDevice, nullptr, &CurrentHostTime);
+
+  // Determine if we need to refresh from KMD
+  bool RefreshTimestamps = false;
+  if (!MDeviceHostBaseTime.second) {
+    // First call - must query actual timestamps
+    RefreshTimestamps = true;
+  } else if (MTimestampActualCallCount < MTimestampCallsBeforeAdaptation) {
+    // Warmup phase: always query actual timestamps for first few calls
+    // to establish a reliable baseline before enabling adaptive logic
+    RefreshTimestamps = true;
   } else {
-    GetGlobalTimestamps(MDevice, nullptr, &HostTime);
-    assert(HostTime >= MDeviceHostBaseTime.second);
-    Diff = HostTime - MDeviceHostBaseTime.second;
+    // Calculate CPU time elapsed since last actual query
+    // Handle clock backward jump or wrap
+    if (CurrentHostTime < MDeviceHostBaseTime.second) {
+      // Clock went backwards - force refresh to re-establish base
+      RefreshTimestamps = true;
+    } else {
+      uint64_t CpuTimeDiffInNS = CurrentHostTime - MDeviceHostBaseTime.second;
+      if (CpuTimeDiffInNS >= MTimestampRefreshTimeoutNS) {
+        RefreshTimestamps = true;
+      }
+    }
   }
-  return MDeviceHostBaseTime.first + Diff;
+
+  if (RefreshTimestamps) {
+    std::cout << "Refresh" << std::endl;
+    // Query actual GPU and CPU timestamps from KMD
+    uint64_t ActualDeviceTime = 0;
+    uint64_t ActualHostTime = 0;
+    GetGlobalTimestamps(MDevice, &ActualDeviceTime, &ActualHostTime);
+
+    // Adaptive timeout adjustment (skip during warmup phase)
+    if (MTimestampActualCallCount >= MTimestampCallsBeforeAdaptation) {
+      // Check for clock backward jumps or wraps (using OLD cached values)
+      bool ClockAnomalyDetected = false;
+      if (ActualHostTime < MDeviceHostBaseTime.second ||
+          ActualDeviceTime < MDeviceHostBaseTime.first) {
+        // Clock went backwards - skip adaptive logic, just reset base
+        ClockAnomalyDetected = true;
+      }
+
+      if (!ClockAnomalyDetected) {
+        // Calculate what the GPU timestamp would have been if we estimated it
+        // Compute differences in signed space to avoid unsigned wrap
+        int64_t CpuTimeDiff = static_cast<int64_t>(ActualHostTime) -
+                               static_cast<int64_t>(MDeviceHostBaseTime.second);
+        int64_t GpuTimeDiff = static_cast<int64_t>(ActualDeviceTime) -
+                               static_cast<int64_t>(MDeviceHostBaseTime.first);
+
+        // Only proceed if differences are positive (monotonic)
+        if (CpuTimeDiff > 0 && GpuTimeDiff > 0) {
+            // Update clock ratio: how much GPU time advances per CPU time
+            // Use exponential moving average to smooth out noise
+            double ObservedRatio = static_cast<double>(GpuTimeDiff) /
+                                    static_cast<double>(CpuTimeDiff);
+            constexpr double Alpha = 0.3; // smoothing factor
+            double OldRatio = MDeviceHostClockRatio;
+            MDeviceHostClockRatio = Alpha * ObservedRatio +
+                                     (1.0 - Alpha) * OldRatio;
+
+            // Calculate what we would have estimated (using OLD ratio)
+            uint64_t CalculatedDeviceTime = MDeviceHostBaseTime.first +
+                                             static_cast<uint64_t>(static_cast<double>(CpuTimeDiff) * OldRatio);
+
+            // Calculate absolute prediction error robustly
+            uint64_t DiffAbs = (ActualDeviceTime > CalculatedDeviceTime)
+                                   ? (ActualDeviceTime - CalculatedDeviceTime)
+                                   : (CalculatedDeviceTime - ActualDeviceTime);
+
+            // Track maximum observed absolute error for safety margin calculation
+            if (DiffAbs > MMaxObservedError) {
+              MMaxObservedError = DiffAbs;
+            }
+
+            uint64_t ElapsedNS = static_cast<uint64_t>(GpuTimeDiff);
+
+            // Require at least 1ms elapsed time to avoid noisy ratios
+            constexpr uint64_t MinElapsedForAdaptation = 1000000ULL; // 1ms
+            if (ElapsedNS > MinElapsedForAdaptation) {
+              // Use relative error to decide adaptation (2% threshold)
+              double RelError = static_cast<double>(DiffAbs) / static_cast<double>(ElapsedNS);
+              if (RelError > 0.02) {
+                // High relative error: decrease timeout (more frequent refreshes)
+                MTimestampRefreshTimeoutNS = std::max(MTimestampRefreshMinTimeoutNS,
+                                                      MTimestampRefreshTimeoutNS / 2);
+              } else {
+                // Low error: increase timeout (less frequent refreshes)
+                // Be conservative: multiply by 2
+                uint64_t NewTimeout = MTimestampRefreshTimeoutNS * 2;
+                MTimestampRefreshTimeoutNS = std::min(MTimestampRefreshMaxTimeoutNS, NewTimeout);
+              }
+            }
+        }
+      }
+    }
+
+    // Update cached timestamps after adaptive logic
+    MDeviceHostBaseTime.first = ActualDeviceTime;
+    MDeviceHostBaseTime.second = ActualHostTime;
+    MTimestampActualCallCount++;
+    MLastReturnedDeviceTime = ActualDeviceTime;
+
+    return ActualDeviceTime;
+  } else {
+        std::cout << "Estimate" << std::endl;
+
+    // Use cached timestamps and estimate GPU time from CPU elapsed time
+    // Apply clock ratio correction and conservative safety margin
+    uint64_t CpuTimeDiffInNS = CurrentHostTime - MDeviceHostBaseTime.second;
+
+    // Apply observed clock ratio to get better estimate
+    double EstimatedGpuDiff = static_cast<double>(CpuTimeDiffInNS) *
+                               MDeviceHostClockRatio;
+
+    // Apply conservative safety margin based on worst-case observed error
+    // Subtract max observed error plus additional 10% buffer to ensure
+    // we never go ahead of actual GPU time
+    int64_t SafetyMargin = MMaxObservedError +
+                            static_cast<int64_t>(EstimatedGpuDiff * 0.1);
+    // Cap safety margin to reasonable bounds
+    SafetyMargin = std::min(SafetyMargin, static_cast<int64_t>(CpuTimeDiffInNS / 2));
+    SafetyMargin = std::max(SafetyMargin, static_cast<int64_t>(0));
+
+    int64_t SafeEstimate = static_cast<int64_t>(EstimatedGpuDiff) - SafetyMargin;
+    SafeEstimate = std::max(SafeEstimate, static_cast<int64_t>(0));
+
+    uint64_t EstimatedDeviceTime = MDeviceHostBaseTime.first +
+                                    static_cast<uint64_t>(SafeEstimate);
+
+    // Enforce monotonicity: never return a timestamp earlier than before
+    if (EstimatedDeviceTime < MLastReturnedDeviceTime) {
+      EstimatedDeviceTime = MLastReturnedDeviceTime;
+    }
+
+    MLastReturnedDeviceTime = EstimatedDeviceTime;
+    return EstimatedDeviceTime;
+  }
 }
 
 bool device_impl::extOneapiCanBuild(

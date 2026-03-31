@@ -2253,6 +2253,18 @@ private:
   std::shared_mutex MDeviceHostBaseTimeMutex;
   std::pair<uint64_t, uint64_t> MDeviceHostBaseTime{0, 0};
 
+  // Adaptive timestamp refresh mechanism
+  static constexpr uint64_t MTimestampRefreshMinTimeoutNS = 1000000ULL;      // 1ms
+  static constexpr uint64_t MTimestampRefreshMaxTimeoutNS = 1000000000ULL;   // 1s
+  // More warmup calls to establish a stable clock ratio on noisy systems
+  static constexpr uint32_t MTimestampCallsBeforeAdaptation = 10;            // warmup calls
+  uint64_t MTimestampRefreshTimeoutNS = 10000000ULL;                         // 10ms (initial, conservative)
+  uint32_t MTimestampActualCallCount = 0;
+  double MDeviceHostClockRatio = 1.0;                                        // GPU/CPU clock ratio
+  uint64_t MLastReturnedDeviceTime = 0;                                      // for monotonicity
+  // Track maximum absolute observed error (ns) between predicted and actual
+  uint64_t MMaxObservedError = 0;                                            // track worst-case drift
+
   const ur_device_handle_t MRootDevice;
 
   // Devices track a list of active queues on it, to allow for synchronization
