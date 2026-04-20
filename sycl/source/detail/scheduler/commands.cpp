@@ -1030,9 +1030,12 @@ void AllocaCommandBase::emitInstrumentationData() {
   // internal infrastructure to guarantee collision free universal IDs.
   if (MTraceEvent) {
     xpti_td *TE = static_cast<xpti_td *>(MTraceEvent);
-    addDeviceMetadata(TE, MQueue);
     // Memory-object is used frequently, so it is always added.
     xpti::addMetadata(TE, "memory_object", reinterpret_cast<size_t>(MAddress));
+    // Add device metadata for sycl and debug streams, but not for perf stream
+    if (!detail::isPerfStream(MStreamID)) {
+      addDeviceMetadata(TE, MQueue);
+    }
     // Since we do NOT add queue_id value to metadata, we are stashing it to TLS
     // as this data is mutable and the metadata is supposed to be invariant
     xpti::framework::stash_tuple(XPTI_QUEUE_INSTANCE_ID_KEY,
@@ -1226,9 +1229,12 @@ void ReleaseCommand::emitInstrumentationData() {
   makeTraceEventProlog(MAddress);
 
   xpti_td *TE = static_cast<xpti_td *>(MTraceEvent);
-  addDeviceMetadata(TE, MQueue);
   xpti::addMetadata(TE, "allocation_type",
                     commandToName(MAllocaCmd->getType()));
+  // Add device metadata for sycl and debug streams, but not for perf stream
+  if (!detail::isPerfStream(MStreamID)) {
+    addDeviceMetadata(TE, MQueue);
+  }
   // Since we do NOT add queue_id value to metadata, we are stashing it to TLS
   // as this data is mutable and the metadata is supposed to be invariant
   xpti::framework::stash_tuple(XPTI_QUEUE_INSTANCE_ID_KEY, getQueueID(MQueue));
@@ -1353,8 +1359,11 @@ void MapMemObject::emitInstrumentationData() {
   makeTraceEventProlog(MAddress);
 
   xpti_td *TE = static_cast<xpti_td *>(MTraceEvent);
-  addDeviceMetadata(TE, MQueue);
   xpti::addMetadata(TE, "memory_object", reinterpret_cast<size_t>(MAddress));
+  // Add device metadata for sycl and debug streams, but not for perf stream
+  if (!detail::isPerfStream(MStreamID)) {
+    addDeviceMetadata(TE, MQueue);
+  }
   // Since we do NOT add queue_id value to metadata, we are stashing it to TLS
   // as this data is mutable and the metadata is supposed to be invariant
   xpti::framework::stash_tuple(XPTI_QUEUE_INSTANCE_ID_KEY, getQueueID(MQueue));
@@ -1416,8 +1425,11 @@ void UnMapMemObject::emitInstrumentationData() {
   makeTraceEventProlog(MAddress);
 
   xpti_td *TE = static_cast<xpti_td *>(MTraceEvent);
-  addDeviceMetadata(TE, MQueue);
   xpti::addMetadata(TE, "memory_object", reinterpret_cast<size_t>(MAddress));
+  // Add device metadata for sycl and debug streams, but not for perf stream
+  if (!detail::isPerfStream(MStreamID)) {
+    addDeviceMetadata(TE, MQueue);
+  }
   // Since we do NOT add queue_id value to metadata, we are stashing it to TLS
   // as this data is mutable and the metadata is supposed to be invariant
   xpti::framework::stash_tuple(XPTI_QUEUE_INSTANCE_ID_KEY, getQueueID(MQueue));
@@ -1511,13 +1523,16 @@ void MemCpyCommand::emitInstrumentationData() {
   makeTraceEventProlog(MAddress);
 
   xpti_td *CmdTraceEvent = static_cast<xpti_td *>(MTraceEvent);
-  addDeviceMetadata(CmdTraceEvent, MQueue);
   xpti::addMetadata(CmdTraceEvent, "memory_object",
                     reinterpret_cast<size_t>(MAddress));
-  xpti::addMetadata(CmdTraceEvent, "copy_from",
-                    MSrcQueue ? deviceToID(MSrcQueue->get_device()) : 0);
-  xpti::addMetadata(CmdTraceEvent, "copy_to",
-                    MQueue ? deviceToID(MQueue->get_device()) : 0);
+  // Add device and copy metadata for sycl and debug streams, but not for perf
+  if (!detail::isPerfStream(MStreamID)) {
+    addDeviceMetadata(CmdTraceEvent, MQueue);
+    xpti::addMetadata(CmdTraceEvent, "copy_from",
+                      MSrcQueue ? deviceToID(MSrcQueue->get_device()) : 0);
+    xpti::addMetadata(CmdTraceEvent, "copy_to",
+                      MQueue ? deviceToID(MQueue->get_device()) : 0);
+  }
   // Since we do NOT add queue_id value to metadata, we are stashing it to TLS
   // as this data is mutable and the metadata is supposed to be invariant
   xpti::framework::stash_tuple(XPTI_QUEUE_INSTANCE_ID_KEY, getQueueID(MQueue));
@@ -1684,13 +1699,16 @@ void MemCpyCommandHost::emitInstrumentationData() {
   makeTraceEventProlog(MAddress);
 
   xpti_td *CmdTraceEvent = static_cast<xpti_td *>(MTraceEvent);
-  addDeviceMetadata(CmdTraceEvent, MQueue);
   xpti::addMetadata(CmdTraceEvent, "memory_object",
                     reinterpret_cast<size_t>(MAddress));
-  xpti::addMetadata(CmdTraceEvent, "copy_from",
-                    MSrcQueue ? deviceToID(MSrcQueue->get_device()) : 0);
-  xpti::addMetadata(CmdTraceEvent, "copy_to",
-                    MQueue ? deviceToID(MQueue->get_device()) : 0);
+  // Add device and copy metadata for sycl and debug streams, but not for perf
+  if (!detail::isPerfStream(MStreamID)) {
+    addDeviceMetadata(CmdTraceEvent, MQueue);
+    xpti::addMetadata(CmdTraceEvent, "copy_from",
+                      MSrcQueue ? deviceToID(MSrcQueue->get_device()) : 0);
+    xpti::addMetadata(CmdTraceEvent, "copy_to",
+                      MQueue ? deviceToID(MQueue->get_device()) : 0);
+  }
   // Since we do NOT add queue_id value to metadata, we are stashing it to TLS
   // as this data is mutable and the metadata is supposed to be invariant
   xpti::framework::stash_tuple(XPTI_QUEUE_INSTANCE_ID_KEY, getQueueID(MQueue));
@@ -1780,9 +1798,12 @@ void EmptyCommand::emitInstrumentationData() {
   makeTraceEventProlog(MAddress);
 
   xpti_td *CmdTraceEvent = static_cast<xpti_td *>(MTraceEvent);
-  addDeviceMetadata(CmdTraceEvent, MQueue);
   xpti::addMetadata(CmdTraceEvent, "memory_object",
                     reinterpret_cast<size_t>(MAddress));
+  // Add device metadata for sycl and debug streams, but not for perf stream
+  if (!detail::isPerfStream(MStreamID)) {
+    addDeviceMetadata(CmdTraceEvent, MQueue);
+  }
   // Since we do NOT add queue_id value to metadata, we are stashing it to TLS
   // as this data is mutable and the metadata is supposed to be invariant
   xpti::framework::stash_tuple(XPTI_QUEUE_INSTANCE_ID_KEY, getQueueID(MQueue));
@@ -1845,9 +1866,12 @@ void UpdateHostRequirementCommand::emitInstrumentationData() {
   makeTraceEventProlog(MAddress);
 
   xpti_td *CmdTraceEvent = static_cast<xpti_td *>(MTraceEvent);
-  addDeviceMetadata(CmdTraceEvent, MQueue);
   xpti::addMetadata(CmdTraceEvent, "memory_object",
                     reinterpret_cast<size_t>(MAddress));
+  // Add device metadata for sycl and debug streams, but not for perf stream
+  if (!detail::isPerfStream(MStreamID)) {
+    addDeviceMetadata(CmdTraceEvent, MQueue);
+  }
   // Since we do NOT add queue_id value to metadata, we are stashing it to TLS
   // as this data is mutable and the metadata is supposed to be invariant
   xpti::framework::stash_tuple(XPTI_QUEUE_INSTANCE_ID_KEY, getQueueID(MQueue));
@@ -2041,12 +2065,18 @@ void instrumentationFillCommonData(
     OutInstanceID = CGKernelInstanceNo;
     OutTraceEvent = CmdTraceEvent;
 
-    addDeviceMetadata(CmdTraceEvent, Queue);
+    // For perf stream, only emit kernel_name (memory_object added separately)
+    // For sycl stream, emit kernel_name and device metadata
+    // For debug stream, emit everything including source location
     if (!KernelName.empty()) {
       xpti::addMetadata(CmdTraceEvent, "kernel_name", KernelName);
     }
-    // We limit the metadata to only include the kernel name and device
-    // information by default.
+
+    if (!detail::isPerfStream(StreamID)) {
+      // Add device metadata for sycl and debug streams
+      addDeviceMetadata(CmdTraceEvent, Queue);
+    }
+
     if (detail::isDebugStream(StreamID)) {
       if (FromSource.has_value()) {
         xpti::addMetadata(CmdTraceEvent, "from_source", FromSource.value());

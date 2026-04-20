@@ -132,15 +132,17 @@ EventImplPtr queue_impl::memset(void *Ptr, int Value, size_t Count,
       .traceType(xpti::trace_point_type_t::node_create)
       .parentEvent(detail::GSYCLGraphEvent);
 
-  // This information is necessary for memset, so we will not guard it by debug
-  // stream check.
+  // For perf stream, only emit memory_ptr. For sycl/debug streams, emit all.
+  auto StreamID = detail::getActiveXPTIStreamID();
   TP.addMetadata([&](auto TEvent) {
-    xpti::addMetadata(TEvent, "sycl_device",
-                      reinterpret_cast<size_t>(MDevice.getHandleRef()));
     xpti::addMetadata(TEvent, "memory_ptr", reinterpret_cast<size_t>(Ptr));
-    xpti::addMetadata(TEvent, "value_set", Value);
-    xpti::addMetadata(TEvent, "memory_size", Count);
-    xpti::addMetadata(TEvent, "queue_id", MQueueID);
+    if (!detail::isPerfStream(StreamID)) {
+      xpti::addMetadata(TEvent, "sycl_device",
+                        reinterpret_cast<size_t>(MDevice.getHandleRef()));
+      xpti::addMetadata(TEvent, "value_set", Value);
+      xpti::addMetadata(TEvent, "memory_size", Count);
+      xpti::addMetadata(TEvent, "queue_id", MQueueID);
+    }
   });
 
   // Before we notifiy the subscribers, we broadcast the 'queue_id', which was a
@@ -187,15 +189,18 @@ EventImplPtr queue_impl::memcpy(void *Dest, const void *Src, size_t Count,
       .traceType(xpti::trace_point_type_t::node_create)
       .parentEvent(GSYCLGraphEvent);
   const char *UserData = "memory_transfer_node::memcpy";
-  // We will include this metadata information as it is required for memcpy.
+  // For perf stream, only emit memory pointers. For sycl/debug, emit all.
+  auto StreamID = detail::getActiveXPTIStreamID();
   TP.addMetadata([&](auto TEvent) {
-    xpti::addMetadata(TEvent, "sycl_device",
-                      reinterpret_cast<size_t>(MDevice.getHandleRef()));
     xpti::addMetadata(TEvent, "src_memory_ptr", reinterpret_cast<size_t>(Src));
     xpti::addMetadata(TEvent, "dest_memory_ptr",
                       reinterpret_cast<size_t>(Dest));
-    xpti::addMetadata(TEvent, "memory_size", Count);
-    xpti::addMetadata(TEvent, "queue_id", MQueueID);
+    if (!detail::isPerfStream(StreamID)) {
+      xpti::addMetadata(TEvent, "sycl_device",
+                        reinterpret_cast<size_t>(MDevice.getHandleRef()));
+      xpti::addMetadata(TEvent, "memory_size", Count);
+      xpti::addMetadata(TEvent, "queue_id", MQueueID);
+    }
   });
   // Before we notify the subscribers, we stash the 'queue_id', which was a
   // metadata entry to TLS for use by callback handlers
@@ -915,20 +920,20 @@ void *queue_impl::instrumentationProlog(const detail::code_location &CodeLoc,
 
   IId = xptiGetUniqueId();
   auto WaitEvent = Event->event_ref();
-  // We will allow the device type to be set
-  xpti::addMetadata(WaitEvent, "sycl_device_type", queueDeviceToString(this));
-  // We limit the amount of metadata that is added to the regular stream.
-  // Only "sycl.debug" stream will have the full information. This improves the
-  // performance when this data is not required by the tool or the collector.
-  if (isDebugStream(StreamID)) {
-    if (HasSourceInfo) {
-      xpti::addMetadata(WaitEvent, "sym_function_name", CodeLoc.functionName());
-      xpti::addMetadata(WaitEvent, "sym_source_file_name", CodeLoc.fileName());
-      xpti::addMetadata(WaitEvent, "sym_line_no",
-                        static_cast<xpti::object_id_t>((CodeLoc.lineNumber())));
-      xpti::addMetadata(
-          WaitEvent, "sym_column_no",
-          static_cast<xpti::object_id_t>((CodeLoc.columnNumber())));
+  // For perf stream, skip all metadata. For sycl stream, add device type.
+  // For debug stream, add everything including source info.
+  if (!isPerfStream(StreamID)) {
+    xpti::addMetadata(WaitEvent, "sycl_device_type", queueDeviceToString(this));
+    if (isDebugStream(StreamID)) {
+      if (HasSourceInfo) {
+        xpti::addMetadata(WaitEvent, "sym_function_name", CodeLoc.functionName());
+        xpti::addMetadata(WaitEvent, "sym_source_file_name", CodeLoc.fileName());
+        xpti::addMetadata(WaitEvent, "sym_line_no",
+                          static_cast<xpti::object_id_t>((CodeLoc.lineNumber())));
+        xpti::addMetadata(
+            WaitEvent, "sym_column_no",
+            static_cast<xpti::object_id_t>((CodeLoc.columnNumber())));
+      }
     }
   }
   xptiNotifySubscribers(StreamID, xpti::trace_wait_begin, nullptr, WaitEvent,

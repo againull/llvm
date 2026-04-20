@@ -39,6 +39,8 @@ constexpr uint32_t GMinVer = __LIBSYCL_MINOR_VERSION;
 constexpr const char *GVerStr = SYCL_VERSION_STR;
 
 /// We define all the streams used the instrumentation framework here
+
+inline constexpr const char *SYCL_PERF_STREAM_NAME = "sycl.perf";
 inline constexpr const char *SYCL_STREAM_NAME = "sycl";
 // We will use "sycl.debug" stream name as an indicator of needing debugging
 // information; in this case, the tool will have to subscribe to the sycl.debug
@@ -59,6 +61,7 @@ extern uint8_t GImageStreamID;
 extern uint8_t GMemAllocStreamID;
 extern uint8_t GSYCLStreamID;
 extern uint8_t GSYCLDebugStreamID;
+extern uint8_t GSYCLPerfStreamID;
 extern uint8_t GUrApiStreamID;
 
 extern xpti::trace_event_data_t *GMemAllocEvent;
@@ -74,14 +77,23 @@ inline bool isDebugStream(xpti::stream_id_t StreamID) {
   return StreamID == detail::GSYCLDebugStreamID;
 }
 
+// Helper to check if xpti stream is perf.
+inline bool isPerfStream(xpti::stream_id_t StreamID) {
+  return StreamID == detail::GSYCLPerfStreamID;
+}
+
 inline uint8_t getActiveXPTIStreamID() {
-  return xptiCheckTraceEnabled(detail::GSYCLDebugStreamID)
-             ? detail::GSYCLDebugStreamID
-             : detail::GSYCLStreamID;
+  // Priority: debug > perf > sycl
+  if (xptiCheckTraceEnabled(detail::GSYCLDebugStreamID))
+    return detail::GSYCLDebugStreamID;
+  if (xptiCheckTraceEnabled(detail::GSYCLPerfStreamID))
+    return detail::GSYCLPerfStreamID;
+  return detail::GSYCLStreamID;
 }
 
 inline bool anyTraceEnabled(uint16_t TraceType) {
   return xptiCheckTraceEnabled(detail::GSYCLDebugStreamID, TraceType) ||
+         xptiCheckTraceEnabled(detail::GSYCLPerfStreamID, TraceType) ||
          xptiCheckTraceEnabled(detail::GSYCLStreamID, TraceType);
 }
 #endif
@@ -105,6 +117,8 @@ public:
       // will receive additional metadata in the regular "sycl" stream.
       detail::GSYCLDebugStreamID = this->initializeStream(
           SYCL_DEBUG_STREAM_NAME, GMajVer, GMinVer, GVerStr);
+      detail::GSYCLPerfStreamID = this->initializeStream(
+          SYCL_PERF_STREAM_NAME, GMajVer, GMinVer, GVerStr);
       // SYCL buffer events
       detail::GBufferStreamID = this->initializeStream(
           SYCL_BUFFER_STREAM_NAME, GMajVer, GMinVer, GVerStr);

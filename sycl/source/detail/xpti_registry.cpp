@@ -26,6 +26,7 @@ uint8_t GCudaCallStreamID = xpti::invalid_id<xpti::stream_id_t>;
 uint8_t GCudaDebugStreamID = xpti::invalid_id<xpti::stream_id_t>;
 uint8_t GSYCLStreamID = xpti::invalid_id<xpti::stream_id_t>;
 uint8_t GSYCLDebugStreamID = xpti::invalid_id<xpti::stream_id_t>;
+uint8_t GSYCLPerfStreamID = xpti::invalid_id<xpti::stream_id_t>;
 uint8_t GUrCallStreamID = xpti::invalid_id<xpti::stream_id_t>;
 uint8_t GUrApiStreamID = xpti::invalid_id<xpti::stream_id_t>;
 
