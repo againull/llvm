@@ -897,18 +897,6 @@ enum class metadata_type_t {
   boolean = 5
 };
 
-/// @typedef subscriber_handle_t
-/// @brief Opaque handle type for identifying a subscriber instance.
-///
-/// Each subscriber loaded by the XPTI framework is assigned a unique handle
-/// that remains valid throughout the subscriber's lifetime (from
-/// xptiSubscriberInit to xptiSubscriberFinish). The handle is used to identify
-/// the subscriber in XPTI API calls that require subscriber-specific context.
-///
-/// This is an opaque type implemented as a unique 64-bit identifier. Subscribers
-/// should treat this as an opaque value and not make assumptions about its
-/// internal representation.
-using subscriber_handle_t = uint64_t;
 
 /// @struct reserved_data_t
 /// @brief Holds additional data associated with a trace event.
@@ -1292,26 +1280,23 @@ typedef void (*plugin_init_t)(unsigned int, unsigned int, const char *,
                               const char *);
 typedef void (*plugin_fini_t)(const char *);
 
-/// @typedef subscriber_init_t
-/// @brief Function pointer type for subscriber initialization callback.
+/// @typedef query_subscriber_stream_detail_level_t
+/// @brief Function pointer type for querying subscriber's requested stream detail level.
 ///
-/// This callback is invoked once when a subscriber is loaded and initialized
-/// by the XPTI framework. The subscriber receives an opaque handle that must
-/// be used in subsequent XPTI API calls requiring subscriber context.
+/// This is an optional callback that subscribers can export to allow the XPTI
+/// framework to query the detail level they request for a given stream. The
+/// framework uses this to compute the effective stream detail level across all
+/// subscribers.
 ///
-/// @param self The opaque subscriber handle for this subscriber instance.
-typedef void (*subscriber_init_t)(xpti::subscriber_handle_t self);
-
-/// @typedef subscriber_fini_t
-/// @brief Function pointer type for subscriber finalization callback.
+/// If a subscriber does not implement this callback, the framework assumes the
+/// subscriber requests the default detail level (NORMAL) for all streams.
 ///
-/// This callback is invoked once when a subscriber is being unloaded by the
-/// XPTI framework. It is called after all xptiTraceFinish callbacks and marks
-/// the end of the subscriber's lifetime. Subscribers should perform final
-/// cleanup operations here.
-///
-/// @param self The opaque subscriber handle for this subscriber instance.
-typedef void (*subscriber_fini_t)(xpti::subscriber_handle_t self);
+/// @param stream_name The null-terminated name of the stream being queried.
+/// @param level Pointer to where the requested detail level should be stored.
+///              The subscriber should set this to their desired level for the stream.
+/// @return Should return true if the level was successfully queried, false otherwise.
+typedef bool (*query_subscriber_stream_detail_level_t)(
+    const char *stream_name, xpti::stream_detail_level_t *level);
 
 constexpr uint16_t trace_task_begin =
     static_cast<uint16_t>(xpti::trace_point_type_t::task_begin);
@@ -1513,39 +1498,23 @@ XPTI_CALLBACK_API void xptiTraceInit(unsigned int major_version,
 /// memory that has been allocated to manage the stream data.
 XPTI_CALLBACK_API void xptiTraceFinish(const char *stream_name);
 
-/// @brief Subscriber initialization callback
-/// @details This function is called by the XPTI framework once when a subscriber
-/// is loaded and initialized. This provides the subscriber with its opaque handle,
-/// which must be used in subsequent XPTI API calls that require subscriber-specific
-/// context.
+/// @brief Optional callback for querying subscriber's stream detail level preference
+/// @details This function can be optionally exported by a subscriber to allow the
+/// XPTI framework to query what detail level the subscriber wants for a given stream.
+/// The framework will call this function (if present) when computing the effective
+/// stream detail level, which is the maximum across all subscribers.
 ///
-/// This callback is invoked before any xptiTraceInit() callbacks for streams.
-/// Subscribers should perform one-time initialization operations here, such as
-/// allocating global data structures or initializing logging systems.
+/// This callback is invoked by the framework when it needs to determine the effective
+/// detail level for a stream. Subscribers can use this to request more or less detailed
+/// trace data based on their needs.
 ///
-/// @param [in] self The opaque subscriber handle for this subscriber instance.
-///                  This handle remains valid throughout the subscriber's lifetime
-///                  (from xptiSubscriberInit to xptiSubscriberFinish) and must be
-///                  used in XPTI API calls that require subscriber context.
-///
-/// @note Subscribers are not required to implement this callback. If not implemented,
-///       the framework will continue loading the subscriber normally.
-XPTI_CALLBACK_API void xptiSubscriberInit(xpti::subscriber_handle_t self);
-
-/// @brief Subscriber finalization callback
-/// @details This function is called by the XPTI framework once when a subscriber
-/// is being unloaded. This callback is invoked after all xptiTraceFinish() callbacks
-/// for all streams have been called, marking the end of the subscriber's lifetime.
-///
-/// Subscribers should perform final cleanup operations here, such as:
-/// - Freeing global data structures allocated in xptiSubscriberInit
-/// - Flushing buffered output
-/// - Closing files or network connections
-/// - Releasing any other resources held by the subscriber
-///
-/// @param [in] self The opaque subscriber handle for this subscriber instance.
+/// @param [in] stream_name Null terminated string indicating the stream name being queried.
+/// @param [out] level Pointer to where the subscriber should store its requested detail level.
+/// @return true if the query was successful and level was set, false otherwise.
 ///
 /// @note Subscribers are not required to implement this callback. If not implemented,
-///       the framework will continue unloading the subscriber normally.
-XPTI_CALLBACK_API void xptiSubscriberFinish(xpti::subscriber_handle_t self);
+///       the framework will assume the subscriber requests the default detail level
+///       (NORMAL) for all streams.
+XPTI_CALLBACK_API bool xptiQuerySubscriberStreamDetailLevel(
+    const char *stream_name, xpti::stream_detail_level_t *level);
 }

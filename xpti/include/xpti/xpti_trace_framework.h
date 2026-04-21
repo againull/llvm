@@ -1003,45 +1003,6 @@ XPTI_EXPORT_API bool xptiCheckTracepointScopeNotification();
 /// @param e The event for which associated data will be removed
 XPTI_EXPORT_API void xptiReleaseEvent(xpti::trace_event_data_t *e);
 
-/// @brief Sets the stream detail level for a specific subscriber.
-///
-/// This function allows a subscriber to request a specific detail level for
-/// data emission on a given stream. The effective detail level for the stream
-/// will be the maximum across all subscribers for that stream. This enables
-/// subscribers to control the amount of optional data emitted by producers
-/// without affecting other subscribers' needs.
-///
-/// The aggregation rule ensures that one subscriber cannot reduce the emitted
-/// data if another subscriber still needs more detail. This prevents
-/// information loss when multiple subscribers with different detail level
-/// requirements are active on the same stream.
-///
-/// @param subscriber The opaque subscriber handle for the subscriber requesting
-///                   the detail level. This handle is provided to the subscriber
-///                   during its initialization via xptiSubscriberInit().
-/// @param stream The stream ID for which the detail level is being set.
-/// @param level The requested detail level from xpti::stream_detail_level_t.
-///              Valid values are:
-///              - XPTI_STREAM_DETAIL_LEVEL_NONE: No optional data
-///              - XPTI_STREAM_DETAIL_LEVEL_BASIC: Basic optional data
-///              - XPTI_STREAM_DETAIL_LEVEL_NORMAL: Normal detail (default)
-///              - XPTI_STREAM_DETAIL_LEVEL_VERBOSE: Maximum detail
-///
-/// @return Returns `xpti::result_t::XPTI_RESULT_SUCCESS` if the detail level
-///         was successfully set. Returns `xpti::result_t::XPTI_RESULT_INVALIDARG`
-///         if the subscriber ID is invalid.
-///
-/// @note This API is intended to be called by subscribers, typically during
-///       their initialization (xptiSubscriberInit) or stream initialization
-///       (xptiTraceInit) callbacks.
-///
-/// @see xptiGetEffectiveStreamDetailLevel
-/// @see xpti::stream_detail_level_t
-///
-XPTI_EXPORT_API xpti::result_t xptiSetSubscriberStreamDetailLevel(
-    xpti::subscriber_handle_t subscriber, xpti::stream_id_t stream,
-    xpti::stream_detail_level_t level);
-
 /// @brief Gets the effective stream detail level for a stream.
 ///
 /// This function returns the effective detail level for a given stream, which
@@ -1154,8 +1115,6 @@ typedef xpti_tracepoint_t *(*xpti_create_tracepoint_t)(const char *,
                                                        const char *, uint32_t,
                                                        uint32_t, void *);
 typedef xpti::result_t (*xpti_delete_tracepoint_t)(xpti_tracepoint_t *);
-typedef xpti::result_t (*xpti_set_subscriber_stream_detail_level_t)(
-    xpti::subscriber_handle_t, xpti::stream_id_t, xpti::stream_detail_level_t);
 typedef xpti::stream_detail_level_t (*xpti_get_effective_stream_detail_level_t)(
     xpti::stream_id_t);
 }

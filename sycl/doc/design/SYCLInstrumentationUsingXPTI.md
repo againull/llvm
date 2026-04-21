@@ -247,7 +247,7 @@ If a tool subscribes to both `"sycl"` and `"sycl.debug"`, only notifications fro
 
 ### Stream Detail Level Control
 
-Starting from XPTI v1.1.0, subscribers can control the amount of metadata emitted on the `"sycl"` stream using `xptiSetSubscriberStreamDetailLevel()`. This provides fine-grained control over tracing overhead:
+Starting from XPTI v1.1.0, subscribers can control the amount of metadata emitted on the `"sycl"` stream by implementing the optional `xptiQuerySubscriberStreamDetailLevel()` callback. This provides fine-grained control over tracing overhead:
 
 - **BASIC**: Only essential metadata (`kernel_name`, `memory_object`)
 - **NORMAL** (default): BASIC + device info + memory operation details
@@ -255,26 +255,31 @@ Starting from XPTI v1.1.0, subscribers can control the amount of metadata emitte
 
 Example usage:
 ```cpp
-static xpti::subscriber_handle_t g_subscriber_handle;
-
-XPTI_CALLBACK_API void xptiSubscriberInit(xpti::subscriber_handle_t self) {
-  g_subscriber_handle = self;
+XPTI_CALLBACK_API bool xptiQuerySubscriberStreamDetailLevel(
+    const char *stream_name, xpti::stream_detail_level_t *level) {
+  // The framework calls this to query our desired detail level
+  if (!level) return false;
+  
+  if (std::string("sycl") == stream_name) {
+    // Request BASIC level for minimal overhead on the sycl stream
+    *level = xpti::stream_detail_level_t::XPTI_STREAM_DETAIL_LEVEL_BASIC;
+  } else {
+    // Use NORMAL (default) for other streams
+    *level = xpti::stream_detail_level_t::XPTI_STREAM_DETAIL_LEVEL_NORMAL;
+  }
+  return true;
 }
 
 XPTI_CALLBACK_API void xptiTraceInit(unsigned int, unsigned int,
                                      const char*, const char *stream_name) {
   if (std::string("sycl") == stream_name) {
     xpti::stream_id_t stream_id = xptiRegisterStream(stream_name);
-    // Request BASIC level for minimal overhead
-    xptiSetSubscriberStreamDetailLevel(
-        g_subscriber_handle, stream_id,
-        xpti::stream_detail_level_t::XPTI_STREAM_DETAIL_LEVEL_BASIC);
     // Register callbacks as usual...
   }
 }
 ```
 
-The `"sycl.debug"` stream remains fully supported for backward compatibility and automatically provides VERBOSE-level metadata.
+If the callback is not implemented, the framework assumes the subscriber wants NORMAL level for all streams. The `"sycl.debug"` stream remains fully supported for backward compatibility and automatically provides VERBOSE-level metadata.
 |  Trace Point Type  | Parameter Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Metadata                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | :----------------: | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **`graph_create`** | <div style="text-align: left"><li>**trace_type**: `xpti::trace_point_type_t::graph_create` that marks the creation of an asynchronous graph.</li> <li> **parent**: `nullptr`</li> <li> **event**: The global asynchronous graph object ID. All other graph related events such as node and edge creation will always this ID as the parent ID. </li> <li> **instance**: Unique ID related to the event, but not a correlation ID as there are other events to correlate to. </li> <li> **user_data**: `nullptr`</li> <p></p> SYCL runtime will always have one instance of a graph object with many disjoint subgraphs that get created during the execution of an application. </div>                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |

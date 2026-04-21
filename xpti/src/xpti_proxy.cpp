@@ -62,7 +62,6 @@ enum functions_t : unsigned {
   XPTI_SET_DEFAULT_EVENT_TYPE,
   XPTI_GET_DEFAULT_TRACE_TYPE,
   XPTI_SET_DEFAULT_TRACE_TYPE,
-  XPTI_SET_SUBSCRIBER_STREAM_DETAIL_LEVEL,
   XPTI_GET_EFFECTIVE_STREAM_DETAIL_LEVEL,
   // All additional functions need to appear before
   // the XPTI_FW_API_COUNT enum
@@ -122,8 +121,6 @@ class ProxyLoader {
       {XPTI_GET_DEFAULT_TRACE_TYPE, "xptiGetDefaultTraceType"},
       {XPTI_SET_DEFAULT_TRACE_TYPE, "xptiSetDefaultTraceType"},
       {XPTI_RELEASE_EVENT, "xptiReleaseEvent"},
-      {XPTI_SET_SUBSCRIBER_STREAM_DETAIL_LEVEL,
-       "xptiSetSubscriberStreamDetailLevel"},
       {XPTI_GET_EFFECTIVE_STREAM_DETAIL_LEVEL,
        "xptiGetEffectiveStreamDetailLevel"}};
 
@@ -752,20 +749,6 @@ xptiSetDefaultTraceType(xpti::trace_point_type_t trace_type) {
         XPTI_SET_DEFAULT_TRACE_TYPE);
     if (f) {
       return (*(xpti_set_default_trace_type_t)f)(trace_type);
-    }
-  }
-  return xpti::result_t::XPTI_RESULT_FAIL;
-}
-
-XPTI_EXPORT_API xpti::result_t xptiSetSubscriberStreamDetailLevel(
-    xpti::subscriber_handle_t subscriber, xpti::stream_id_t stream,
-    xpti::stream_detail_level_t level) {
-  if (xpti::ProxyLoader::instance().noErrors()) {
-    auto f = xpti::ProxyLoader::instance().functionByIndex(
-        XPTI_SET_SUBSCRIBER_STREAM_DETAIL_LEVEL);
-    if (f) {
-      return (*(xpti_set_subscriber_stream_detail_level_t)f)(subscriber, stream,
-                                                             level);
     }
   }
   return xpti::result_t::XPTI_RESULT_FAIL;

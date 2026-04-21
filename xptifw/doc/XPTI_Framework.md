@@ -126,11 +126,9 @@ considered valid: (1) `xptiTraceInit` and (2) `xptiTraceFinish`. The
 dispatcher uses these API calls to validate the subscriber. If these entry
 points are not present, then the subscriber is not loaded.
 
-Additionally, subscribers may optionally implement two lifecycle callbacks:
-(3) `xptiSubscriberInit` and (4) `xptiSubscriberFinish`. These callbacks
-provide subscriber-level initialization and finalization, as opposed to the
-per-stream initialization provided by `xptiTraceInit` and `xptiTraceFinish`.
-Finally, subscribers must implement (5) callback handlers for the trace
+Additionally, subscribers may optionally implement (3) `xptiQuerySubscriberStreamDetailLevel`,
+which allows the framework to query the subscriber's desired detail level for each stream.
+Finally, subscribers must implement (4) callback handlers for the trace
 events they wish to receive.
 
 The `xptiTraceInit` callback is called by the dispatcher when the generator of
@@ -186,29 +184,35 @@ dispatcher when the instrumented code is winding down a data stream by calling
  `xptiFinalize` for the stream.
 
 In addition to the per-stream callbacks, subscribers may optionally implement
-subscriber-level lifecycle callbacks:
+a detail level query callback to control the amount of optional data emitted:
 
 ```cpp
-XPTI_CALLBACK_API void xptiSubscriberInit(xpti::subscriber_handle_t self) {
-  // Called once when the subscriber is loaded and initialized
-  // Perform one-time initialization here (e.g., allocate global resources)
-  // The 'self' handle can be used for subscriber-specific XPTI API calls
-}
-
-XPTI_CALLBACK_API void xptiSubscriberFinish(xpti::subscriber_handle_t self) {
-  // Called once when the subscriber is being unloaded
-  // This is called after all xptiTraceFinish callbacks
-  // Perform final cleanup here (e.g., free global resources, flush buffers)
+XPTI_CALLBACK_API bool xptiQuerySubscriberStreamDetailLevel(
+    const char *stream_name, xpti::stream_detail_level_t *level) {
+  // This optional callback allows the framework to query your desired
+  // detail level for a specific stream. The framework computes the effective
+  // detail level as the maximum across all subscribers.
+  
+  if (level) {
+    // Request VERBOSE detail for streams you want maximum data from
+    if (std::string(stream_name) == "sycl") {
+      *level = xpti::stream_detail_level_t::XPTI_STREAM_DETAIL_LEVEL_VERBOSE;
+    } else {
+      // Use NORMAL (default) for other streams
+      *level = xpti::stream_detail_level_t::XPTI_STREAM_DETAIL_LEVEL_NORMAL;
+    }
+    return true;
+  }
+  return false;
 }
 ```
 
-The `xptiSubscriberInit` callback is invoked once when the subscriber is
-loaded, before any `xptiTraceInit` calls. It provides the subscriber with an
-opaque handle that can be used in subsequent XPTI API calls requiring
-subscriber-specific context. The `xptiSubscriberFinish` callback is invoked
-once when the subscriber is being unloaded, after all `xptiTraceFinish` calls
-have completed. These callbacks are optional; if not implemented, the framework
-will continue loading/unloading the subscriber normally.
+The `xptiQuerySubscriberStreamDetailLevel` callback is invoked by the framework
+when it needs to determine the effective detail level for a stream. This happens
+during stream initialization. The framework queries all loaded subscribers and
+uses the maximum requested level across all subscribers. If a subscriber does not
+implement this callback, the framework assumes it wants the default (NORMAL) level
+for all streams.
 
 The implementation of the callbacks is where attention needs to be given to the
 handshake protocol or specification for a given stream the subscriber wants to
@@ -254,8 +258,8 @@ invariant across all instances of that tracepoint.
 
 > **NOTE:** A subscriber **must** implement the `xptiTraceInit` and
 > `xptiTraceFinish` APIs for the dispatcher to successfully load the subscriber.
-> Optionally, a subscriber may implement `xptiSubscriberInit` and
-> `xptiSubscriberFinish` for subscriber-level lifecycle management.
+> Optionally, a subscriber may implement `xptiQuerySubscriberStreamDetailLevel`
+> to control the detail level of optional data emitted by producers.
 
 > **NOTE:** The specification for a given event stream **must** be consulted
 > before implementing the callback handlers for various trace types.
@@ -753,9 +757,9 @@ Stream detail level control is designed to address scenarios where:
 - Producers emit optional data that may be expensive to generate
 - Users want to minimize tracing overhead for certain subscribers without affecting others
 
-The framework provides two new APIs for this feature:
-- `xptiSetSubscriberStreamDetailLevel`: Allows a subscriber to request a specific detail level for a stream
-- `xptiGetEffectiveStreamDetailLevel`: Allows producers to query the effective detail level for a stream
+The framework provides the following capabilities for this feature:
+- `xptiQuerySubscriberStreamDetailLevel`: Optional subscriber callback that the framework calls to query the subscriber's desired detail level for a stream
+- `xptiGetEffectiveStreamDetailLevel`: API for producers to query the effective detail level for a stream
 
 #### Detail Level Enum
 
@@ -797,34 +801,44 @@ For example:
 
 #### Subscriber Usage
 
-Subscribers should request their desired detail level during initialization:
+Subscribers should implement an optional callback that allows the framework to query
+their desired detail level for each stream:
 
 ```cpp
-XPTI_CALLBACK_API void xptiSubscriberInit(xpti::subscriber_handle_t self) {
-  // Store the subscriber handle for later use
-  g_subscriber_handle = self;
+XPTI_CALLBACK_API bool xptiQuerySubscriberStreamDetailLevel(
+    const char *stream_name, xpti::stream_detail_level_t *level) {
+  // The framework calls this to ask what detail level we want for each stream
+  // This is called during stream initialization
+  
+  if (!level) return false;
+  
+  if (std::string(stream_name) == "sycl") {
+    // Request verbose detail for the SYCL stream
+    *level = xpti::stream_detail_level_t::XPTI_STREAM_DETAIL_LEVEL_VERBOSE;
+  } else if (std::string(stream_name) == "sycl.experimental.mem_alloc") {
+    // Request basic detail for memory allocation stream
+    *level = xpti::stream_detail_level_t::XPTI_STREAM_DETAIL_LEVEL_BASIC;
+  } else {
+    // Use normal (default) detail for other streams
+    *level = xpti::stream_detail_level_t::XPTI_STREAM_DETAIL_LEVEL_NORMAL;
+  }
+  return true;
 }
 
 XPTI_CALLBACK_API void xptiTraceInit(unsigned int major_version,
                                      unsigned int minor_version,
                                      const char *version_str,
                                      const char *stream_name) {
-  if (std::string("sycl") == stream_name) {
-    xpti::stream_id_t stream_id = xptiRegisterStream(stream_name);
-
-    // Request basic detail level for this subscriber on the SYCL stream
-    xptiSetSubscriberStreamDetailLevel(
-        g_subscriber_handle,
-        stream_id,
-        xpti::stream_detail_level_t::XPTI_STREAM_DETAIL_LEVEL_BASIC);
-
-    // Register callbacks as usual
-    xptiRegisterCallback(stream_id,
-                        (uint16_t)xpti::trace_point_type_t::task_begin,
-                        my_callback);
-  }
+  // Register callbacks as usual
+  xpti::stream_id_t stream_id = xptiRegisterStream(stream_name);
+  xptiRegisterCallback(stream_id,
+                      (uint16_t)xpti::trace_point_type_t::task_begin,
+                      my_callback);
 }
 ```
+
+If a subscriber does not implement `xptiQuerySubscriberStreamDetailLevel`, the
+framework assumes it wants the default (NORMAL) level for all streams.
 
 #### Producer Usage
 
@@ -855,28 +869,31 @@ void emit_trace_data(xpti::stream_id_t stream_id, const TraceData& data) {
 
 #### API Reference
 
-##### `xptiSetSubscriberStreamDetailLevel`
+##### `xptiQuerySubscriberStreamDetailLevel` (Subscriber Callback)
 
 ```cpp
-xpti::result_t xptiSetSubscriberStreamDetailLevel(
-    xpti::subscriber_handle_t subscriber,
-    xpti::stream_id_t stream,
-    xpti::stream_detail_level_t level);
+XPTI_CALLBACK_API bool xptiQuerySubscriberStreamDetailLevel(
+    const char *stream_name,
+    xpti::stream_detail_level_t *level);
 ```
 
-Sets the stream detail level for a specific subscriber on a stream.
+Optional subscriber-exported callback that allows the XPTI framework to query
+the detail level requested by the subscriber for a given stream. The framework
+calls this during stream initialization to compute the effective detail level
+across all subscribers.
 
 **Parameters:**
-- `subscriber`: The opaque subscriber handle (provided via `xptiSubscriberInit`)
-- `stream`: The stream ID for which the detail level is being set
-- `level`: The requested detail level
+- `stream_name`: Null-terminated string indicating the stream name being queried
+- `level`: Pointer to where the subscriber should store its requested detail level
 
 **Returns:**
-- `XPTI_RESULT_SUCCESS` if the detail level was successfully set
-- `XPTI_RESULT_INVALIDARG` if the subscriber ID is invalid
+- `true` if the query was successful and `level` was set
+- `false` otherwise
 
-**Note:** This API should typically be called during subscriber initialization
-(`xptiSubscriberInit`) or stream initialization (`xptiTraceInit`).
+**Note:** This callback is optional. If not implemented, the framework assumes
+the subscriber requests the default (NORMAL) level for all streams. The callback
+is invoked by the framework during stream initialization (when `xptiInitialize`
+is called for a stream).
 
 ##### `xptiGetEffectiveStreamDetailLevel`
 
@@ -895,9 +912,9 @@ Gets the effective detail level for a stream (maximum across all subscribers).
 - If no subscriber has set a level, returns `XPTI_STREAM_DETAIL_LEVEL_NORMAL` (default)
 
 **Performance Note:** This API is lock-free and uses atomics for very fast reads.
-The effective level is cached per stream and only recalculated when subscribers
-change their detail level requests. This makes it suitable for use in hot paths
-where producers emit trace data.
+The effective level is cached per stream and only recomputed when streams are
+initialized. This makes it suitable for use in hot paths where producers frequently
+emit trace data.
 
 ## Performance of the Framework
 

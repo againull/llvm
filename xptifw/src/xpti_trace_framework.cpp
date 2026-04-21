@@ -388,16 +388,12 @@ public:
   struct plugin_data_t {
     /// The handle of the loaded shared object
     xpti_plugin_handle_t handle = nullptr;
-    /// Unique subscriber ID for this plugin
-    xpti::subscriber_handle_t subscriber_id = 0;
     /// The initialization entry point
     xpti::plugin_init_t init = nullptr;
     /// The finalization entry point
     xpti::plugin_fini_t fini = nullptr;
-    /// The subscriber initialization entry point (optional)
-    xpti::subscriber_init_t subscriber_init = nullptr;
-    /// The subscriber finalization entry point (optional)
-    xpti::subscriber_fini_t subscriber_fini = nullptr;
+    /// Optional callback for querying stream detail level (optional)
+    xpti::query_subscriber_stream_detail_level_t query_detail_level = nullptr;
     /// The name of the shared object (in UTF8?))
     std::string name;
     /// indicates whether the data structure is valid
@@ -405,10 +401,9 @@ public:
   };
 
   // Data structures defined to hold the plugin data that can be looked up by
-  // plugin name, library handle, or subscriber ID
+  // plugin name or library handle
   using plugin_handle_lut_t = std::map<xpti_plugin_handle_t, plugin_data_t>;
   using plugin_name_lut_t = std::map<std::string, plugin_data_t>;
-  using subscriber_id_lut_t = std::map<xpti::subscriber_handle_t, plugin_data_t>;
 
   // We unload all loaded shared objects in the destructor; Must not be invoked
   // in the DLLMain() function and possibly the __fini() function in Linux
@@ -470,32 +465,22 @@ public:
           g_helper.findFunction(Handle, "xptiTraceFinish"));
       if (InitFunc && FiniFunc) {
         //  We appear to have loaded a valid plugin, so we will insert the
-        //  plugin information into the three maps guarded by a lock
+        //  plugin information into the maps guarded by a lock
         plugin_data_t Data;
         Data.valid = true;
         Data.handle = Handle;
         Data.name = Path;
         Data.init = InitFunc;
         Data.fini = FiniFunc;
-        // Generate unique subscriber ID
-        Data.subscriber_id = MNextSubscriberID.fetch_add(1, std::memory_order_relaxed);
 
-        // Look for optional subscriber lifecycle callbacks
-        Data.subscriber_init = reinterpret_cast<xpti::subscriber_init_t>(
-            g_helper.findFunction(Handle, "xptiSubscriberInit"));
-        Data.subscriber_fini = reinterpret_cast<xpti::subscriber_fini_t>(
-            g_helper.findFunction(Handle, "xptiSubscriberFinish"));
+        // Look for optional detail level query callback
+        Data.query_detail_level = reinterpret_cast<xpti::query_subscriber_stream_detail_level_t>(
+            g_helper.findFunction(Handle, "xptiQuerySubscriberStreamDetailLevel"));
 
         {
           std::lock_guard<std::mutex> Lock(MMutex);
           MNameLUT[Path] = Data;
           MHandleLUT[Handle] = Data;
-          MSubscriberIDLUT[Data.subscriber_id] = Data;
-        }
-
-        // Call subscriber initialization callback if present
-        if (Data.subscriber_init) {
-          Data.subscriber_init(Data.subscriber_id);
         }
       } else {
         // We may have loaded another shared object that is not a tool plugin
@@ -544,10 +529,6 @@ public:
     //  with the new stream information.
     if (MHandleLUT.size()) {
       for (auto &Handle : MHandleLUT) {
-        // Set default stream detail level for this subscriber
-        xptiSetSubscriberStreamDetailLevel(Handle.second.subscriber_id,
-                                         xptiRegisterStream(Stream),
-                                         xpti::stream_detail_level_t::XPTI_STREAM_DETAIL_LEVEL_NORMAL);
         Handle.second.init(major_revision, minor_revision, version_string,
                            Stream);
       }
@@ -604,26 +585,41 @@ public:
     }
   }
 
-  /// Checks if a subscriber ID is valid.
-  /// @param subscriber_id The subscriber ID to validate.
-  /// @return true if the subscriber ID exists, false otherwise.
-  bool isValidSubscriberID(xpti::subscriber_handle_t subscriber_id) {
-    std::lock_guard<std::mutex> Lock(MMutex);
-    return MSubscriberIDLUT.find(subscriber_id) != MSubscriberIDLUT.end();
-  }
-
   /// Unloads all loaded plugins.
   void unloadAllPlugins() {
     for (auto &Item : MNameLUT) {
-      // Call subscriber finalization callback if present
-      if (Item.second.subscriber_fini) {
-        Item.second.subscriber_fini(Item.second.subscriber_id);
-      }
       unloadPlugin(Item.second.handle);
     }
     MHandleLUT.clear();
     MNameLUT.clear();
-    MSubscriberIDLUT.clear();
+  }
+
+  /// Query all subscribers for their requested detail level for a stream
+  /// @param stream_name The name of the stream to query
+  /// @return The maximum detail level requested by all subscribers
+  xpti::stream_detail_level_t querySubscribersForStreamDetailLevel(const char *stream_name) {
+    std::lock_guard<std::mutex> Lock(MMutex);
+
+    xpti::stream_detail_level_t max_level =
+        xpti::stream_detail_level_t::XPTI_STREAM_DETAIL_LEVEL_NORMAL;  // default
+
+    for (const auto &handle_entry : MHandleLUT) {
+      const plugin_data_t &plugin = handle_entry.second;
+
+      // If subscriber has the query callback, call it
+      if (plugin.query_detail_level) {
+        xpti::stream_detail_level_t requested_level;
+        if (plugin.query_detail_level(stream_name, &requested_level)) {
+          // Take the maximum across all subscribers
+          if (static_cast<uint8_t>(requested_level) > static_cast<uint8_t>(max_level)) {
+            max_level = requested_level;
+          }
+        }
+      }
+      // If no callback, assume default (NORMAL) which is already set
+    }
+
+    return max_level;
   }
 
 private:
@@ -631,10 +627,6 @@ private:
   plugin_name_lut_t MNameLUT;
   /// Hash map that maps shared object handle to the plugin data
   plugin_handle_lut_t MHandleLUT;
-  /// Hash map that maps subscriber ID to the plugin data
-  subscriber_id_lut_t MSubscriberIDLUT;
-  /// Counter for generating unique subscriber IDs
-  std::atomic<xpti::subscriber_handle_t> MNextSubscriberID{1};
   /// Lock to ensure the operation on these maps are safe
   std::mutex MMutex;
   /// Mutex to ensure that plugin loading is thread-safe.
@@ -1919,7 +1911,6 @@ public:
   void clear() {
     MCallbacksByStream.clear();
     std::lock_guard<std::mutex> Lock(MDetailLevelLock);
-    MStreamDetailLevels.clear();
     // Reset all effective levels to default
     for (size_t i = 0; i < 256; ++i) {
       MEffectiveStreamDetailLevels[i].store(
@@ -1929,44 +1920,30 @@ public:
     }
   }
 
-  /// @brief Sets the stream detail level for a specific subscriber on a stream.
+  /// @brief Sets the Subscribers pointer for querying detail levels
+  void setSubscribers(Subscribers *subscribers) {
+    MSubscribers = subscribers;
+  }
+
+  /// @brief Recomputes the effective stream detail level by querying all subscribers.
   ///
-  /// This function allows a subscriber to request a specific detail level for
-  /// data emission on a given stream. The effective detail level for the stream
-  /// will be the maximum across all subscribers.
+  /// This function queries all loaded subscribers (via their query callback if present)
+  /// to determine what detail level each subscriber wants for the given stream, then
+  /// computes the effective level as the maximum across all subscribers.
   ///
-  /// @param subscriber The subscriber handle requesting the detail level.
-  /// @param stream The stream ID for which the detail level is being set.
-  /// @param level The requested detail level.
-  ///
-  /// @return Returns `xpti::result_t::XPTI_RESULT_SUCCESS` if the detail level
-  ///         was successfully set.
-  xpti::result_t setSubscriberStreamDetailLevel(
-      xpti::subscriber_handle_t subscriber, xpti::stream_id_t stream,
-      xpti::stream_detail_level_t level) {
+  /// @param stream The stream ID for which to recompute the effective detail level.
+  /// @param stream_name The name of the stream (needed for subscriber callbacks).
+  void recomputeEffectiveStreamDetailLevel(xpti::stream_id_t stream,
+                                           const char *stream_name) {
     std::lock_guard<std::mutex> Lock(MDetailLevelLock);
 
-    // Update the subscriber's requested level for this stream
-    MStreamDetailLevels[subscriber][stream] = level;
-
-    // Recalculate the effective level for this stream (max across all subscribers)
-    uint8_t max_level = static_cast<uint8_t>(
-        xpti::stream_detail_level_t::XPTI_STREAM_DETAIL_LEVEL_NONE);
-
-    for (const auto &subscriber_entry : MStreamDetailLevels) {
-      const auto &stream_levels = subscriber_entry.second;
-      auto it = stream_levels.find(stream);
-      if (it != stream_levels.end()) {
-        uint8_t requested_level = static_cast<uint8_t>(it->second);
-        if (requested_level > max_level) {
-          max_level = requested_level;
-        }
-      }
-    }
+    // Query all subscribers for their requested detail level for this stream
+    xpti::stream_detail_level_t max_level =
+        MSubscribers->querySubscribersForStreamDetailLevel(stream_name);
 
     // Update the cached effective level atomically
-    MEffectiveStreamDetailLevels[stream].store(max_level, std::memory_order_release);
-    return xpti::result_t::XPTI_RESULT_SUCCESS;
+    MEffectiveStreamDetailLevels[stream].store(
+        static_cast<uint8_t>(max_level), std::memory_order_release);
   }
 
   /// @brief Gets the effective stream detail level for a stream.
@@ -2045,19 +2022,8 @@ private:
   statistics_t MStats;
   stream_flags_t MStreamFlags;
 
-  /// @typedef stream_detail_levels_t
-  /// @brief Maps stream IDs to their requested detail levels.
-  using stream_detail_levels_t =
-      phmap::flat_hash_map<xpti::stream_id_t, xpti::stream_detail_level_t>;
-
-  /// @typedef subscriber_detail_levels_t
-  /// @brief Maps subscriber handles to their per-stream detail level requests.
-  using subscriber_detail_levels_t =
-      phmap::flat_hash_map<xpti::subscriber_handle_t, stream_detail_levels_t>;
-
-  /// Map tracking detail level requests per subscriber per stream
-  /// Used only during setSubscriberStreamDetailLevel to recalculate effective levels
-  subscriber_detail_levels_t MStreamDetailLevels;
+  /// Pointer to Subscribers to query for detail levels
+  Subscribers *MSubscribers = nullptr;
 
   /// Cached effective detail levels per stream (indexed by stream_id)
   /// This is a lock-free array of atomics for fast reads by producers
@@ -2122,6 +2088,10 @@ public:
     MSubscribers.loadFromEnvironmentVariable();
     MTraceEnabled =
         (g_helper.checkTraceEnv() && MSubscribers.hasValidSubscribers());
+
+    // Connect Notifications to Subscribers for detail level queries
+    MNotifier.setSubscribers(&MSubscribers);
+
     //  We create a default stream "xpti.framework" and save it in
     //  `g_default_stream
     g_default_stream_id = registerStream(g_default_stream);
@@ -2414,8 +2384,14 @@ public:
     if (!Stream || !VersionString)
       return xpti::result_t::XPTI_RESULT_INVALIDARG;
 
+    // Initialize subscribers for the stream
     MSubscribers.initializeForStream(Stream, MajorRevision, MinorRevision,
                                      VersionString);
+
+    // Query subscribers for their requested detail level and compute effective level
+    xpti::stream_id_t stream_id = registerStream(Stream);
+    MNotifier.recomputeEffectiveStreamDetailLevel(stream_id, Stream);
+
     return xpti::result_t::XPTI_RESULT_SUCCESS;
   }
 
@@ -2616,29 +2592,6 @@ public:
   }
 
   bool hasSubscribers() { return MSubscribers.hasValidSubscribers(); }
-
-  /// @brief Sets the stream detail level for a specific subscriber.
-  ///
-  /// Allows a subscriber to request a specific detail level for data emission
-  /// on a given stream. The effective detail level for the stream will be the
-  /// maximum across all subscribers.
-  ///
-  /// @param subscriber The subscriber handle requesting the detail level.
-  /// @param stream The stream ID for which the detail level is being set.
-  /// @param level The requested detail level.
-  ///
-  /// @return Returns `xpti::result_t::XPTI_RESULT_SUCCESS` if the detail level
-  ///         was successfully set, `xpti::result_t::XPTI_RESULT_INVALIDARG` if
-  ///         the subscriber ID is invalid.
-  xpti::result_t setSubscriberStreamDetailLevel(
-      xpti::subscriber_handle_t subscriber, xpti::stream_id_t stream,
-      xpti::stream_detail_level_t level) {
-    // Validate subscriber ID
-    if (!MSubscribers.isValidSubscriberID(subscriber)) {
-      return xpti::result_t::XPTI_RESULT_INVALIDARG;
-    }
-    return MNotifier.setSubscriberStreamDetailLevel(subscriber, stream, level);
-  }
 
   /// @brief Gets the effective stream detail level for a stream.
   ///
@@ -3931,17 +3884,6 @@ XPTI_EXPORT_API void xptiReleaseEvent(xpti::trace_event_data_t *Event) {
 ///         was successfully set. Returns `xpti::result_t::XPTI_RESULT_INVALIDARG`
 ///         if the subscriber ID is invalid.
 ///
-/// @note The effective detail level for a stream is the maximum across all
-///       subscribers. One subscriber cannot reduce the detail level if another
-///       subscriber still needs more detail.
-///
-XPTI_EXPORT_API xpti::result_t xptiSetSubscriberStreamDetailLevel(
-    xpti::subscriber_handle_t subscriber, xpti::stream_id_t stream,
-    xpti::stream_detail_level_t level) {
-  return xpti::Framework::instance().setSubscriberStreamDetailLevel(
-      subscriber, stream, level);
-}
-
 /// @brief Gets the effective stream detail level for a stream.
 ///
 /// This function returns the effective detail level for a given stream, which

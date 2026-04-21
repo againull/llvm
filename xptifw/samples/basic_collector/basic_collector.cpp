@@ -18,7 +18,6 @@
 #include <unordered_map>
 
 static uint8_t GStreamID = 0;
-static xpti::subscriber_handle_t GSubscriberHandle = 0;
 std::mutex GIOMutex;
 
 // The lone callback function we are going to use to demonstrate how to attach
@@ -112,19 +111,19 @@ XPTI_CALLBACK_API void xptiTraceFinish(const char *stream_name) {
   // We do nothing here
 }
 
-XPTI_CALLBACK_API void xptiSubscriberInit(xpti::subscriber_handle_t self) {
-  // Called once when the subscriber is loaded
-  // This is where you would initialize global resources, logging, etc.
-  printf("Subscriber initialized with handle: %lu\n", self);
-
-  // Store the subscriber handle for use in xptiTraceInit
-  GSubscriberHandle = self;
-}
-
-XPTI_CALLBACK_API void xptiSubscriberFinish(xpti::subscriber_handle_t self) {
-  // Called once when the subscriber is being unloaded
-  // This is where you would clean up global resources
-  printf("Subscriber finalized with handle: %lu\n", self);
+// Optional callback that allows the framework to query our desired detail level
+// for a given stream. The framework uses this to compute the effective detail
+// level (max across all subscribers) for each stream.
+XPTI_CALLBACK_API bool xptiQuerySubscriberStreamDetailLevel(
+    const char *stream_name, xpti::stream_detail_level_t *level) {
+  // For this basic collector, we request VERBOSE level for all streams
+  // to get maximum detail. Other subscribers might request different levels
+  // based on their needs.
+  if (level) {
+    *level = xpti::stream_detail_level_t::XPTI_STREAM_DETAIL_LEVEL_VERBOSE;
+    return true;
+  }
+  return false;
 }
 
 XPTI_CALLBACK_API void tpCallback(uint16_t TraceType,
