@@ -363,6 +363,13 @@ enum class stream_detail_level_t : uint8_t {
   XPTI_STREAM_DETAIL_LEVEL_VERBOSE = 3  ///< Maximum detail
 };
 
+/// @def XPTI_HAS_STREAM_DETAIL_LEVEL
+/// @brief Feature detection macro for stream detail level support.
+/// Subscribers can use this macro to conditionally compile code that uses
+/// stream_detail_level_t, xptiQuerySubscriberStreamDetailLevel, and
+/// xptiGetEffectiveStreamDetailLevel.
+#define XPTI_HAS_STREAM_DETAIL_LEVEL 1
+
 //
 //  Helper macros for creating new tracepoint and
 //  event types

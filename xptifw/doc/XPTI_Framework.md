@@ -728,6 +728,9 @@ void function1() {
 Subscribers can request different detail levels per stream to control optional data emission.
 Effective level is the max across all subscribers.
 
+**Feature Detection**: Use `#ifdef XPTI_HAS_STREAM_DETAIL_LEVEL` to conditionally compile code
+that depends on this feature. This ensures backward compatibility with older XPTI versions.
+
 #### Detail Level Enum
 
 The `xpti::stream_detail_level_t` enum defines four ordered levels:
@@ -759,7 +762,10 @@ Effective level = max across all subscribers. Defaults to NORMAL if not set.
 
 #### Subscriber Usage
 
+Use `XPTI_HAS_STREAM_DETAIL_LEVEL` for backward compatibility:
+
 ```cpp
+#ifdef XPTI_HAS_STREAM_DETAIL_LEVEL
 XPTI_CALLBACK_API bool xptiQuerySubscriberStreamDetailLevel(
     const char *stream_name, xpti::stream_detail_level_t *level) {
   if (!level) return false;
@@ -770,17 +776,20 @@ XPTI_CALLBACK_API bool xptiQuerySubscriberStreamDetailLevel(
   }
   return true;
 }
+#endif
 ```
 
 #### Producer Usage
 
-Producers should query the effective detail level before emitting optional data:
+Producers should query the effective detail level before emitting optional data.
+Use `XPTI_HAS_STREAM_DETAIL_LEVEL` to ensure backward compatibility:
 
 ```cpp
 void emit_trace_data(xpti::stream_id_t stream_id, const TraceData& data) {
   // Always emit essential trace points
   xptiNotifySubscribers(stream_id, trace_type, parent, event, instance, &data);
 
+#ifdef XPTI_HAS_STREAM_DETAIL_LEVEL
   // Check if we should emit optional metadata
   auto level = xptiGetEffectiveStreamDetailLevel(stream_id);
 
@@ -796,6 +805,7 @@ void emit_trace_data(xpti::stream_id_t stream_id, const TraceData& data) {
     // Emit verbose-level optional metadata (potentially expensive)
     compute_and_emit_detailed_analysis(event);
   }
+#endif
 }
 ```
 
