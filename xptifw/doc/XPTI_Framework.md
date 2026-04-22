@@ -20,6 +20,13 @@
       - [`xptiMakeEvent`](#xptimakeevent)
       - [Notifying the registered listeners](#notifying-the-registered-listeners)
       - [`xptiNotifySubscribers`](#xptinotifysubscribers)
+    - [Stream Detail Level Control](#stream-detail-level-control)
+      - [Overview](#overview-1)
+      - [Detail Level Enum](#detail-level-enum)
+      - [Aggregation Rule](#aggregation-rule)
+      - [Subscriber Usage](#subscriber-usage)
+      - [Producer Usage](#producer-usage)
+      - [API Reference](#api-reference)
   - [Performance of the Framework](#performance-of-the-framework)
   - [Modeling and projection](#modeling-and-projection)
     - [Computing the cost incurred in the framework](#computing-the-cost-incurred-in-the-framework)
@@ -114,12 +121,10 @@ ownership of the subscriber is controlled by tools or applications that consume
 the generated event streams and **must** follow the protocol or handshake
 defined for an event stream.
 
-There are three important things that a subscriber must implement to be
-functional: (1) `xptiTraceInit`, (2) `xptiTraceFinish` and (3) callback
-handlers. The `xptiTraceInit` and `xptiTraceFinish` API calls are used by the
-dispatcher loading the subscriber dynamically to determine if the subscriber
-is a valid subscriber. If these entry points are not present, then the
-subscriber is not loaded.
+A subscriber must implement two required entry points: `xptiTraceInit` and
+`xptiTraceFinish`. Optionally, it may implement `xptiQuerySubscriberStreamDetailLevel`
+to control detail level per stream. Finally, it must implement callback handlers
+for trace events it wishes to receive.
 
 The `xptiTraceInit` callback is called by the dispatcher when the generator of
 a new stream of data makes a call to `xptiInitialize` for the new stream. The
@@ -173,6 +178,27 @@ allocated to handle the stream. The `xptiTraceFinish` call is made by the
 dispatcher when the instrumented code is winding down a data stream by calling
  `xptiFinalize` for the stream.
 
+In addition to the per-stream callbacks, subscribers may optionally implement
+a detail level query callback to control the amount of optional data emitted:
+
+```cpp
+XPTI_CALLBACK_API bool xptiQuerySubscriberStreamDetailLevel(
+    const char *stream_name, xpti::stream_detail_level_t *level) {
+  if (level) {
+    if (std::string(stream_name) == "sycl") {
+      *level = xpti::stream_detail_level_t::XPTI_STREAM_DETAIL_LEVEL_VERBOSE;
+    } else {
+      *level = xpti::stream_detail_level_t::XPTI_STREAM_DETAIL_LEVEL_NORMAL;
+    }
+    return true;
+  }
+  return false;
+}
+```
+
+Called during stream initialization. Framework uses max level across all subscribers.
+Defaults to NORMAL if not implemented.
+
 The implementation of the callbacks is where attention needs to be given to the
 handshake protocol or specification for a given stream the subscriber wants to
 attach to and consume the data. The instrumented library may send additional
@@ -215,11 +241,9 @@ support backward compatibility, a 64-bit universal ID is returned as well. This
 64-bit value. The payload information for a given tracepoint will always remain
 invariant across all instances of that tracepoint. 
 
-> **NOTE:** A subscriber **must** implement the `xptiTraceInit` and
-> `xptiTraceFinish` APIs for the dispatcher to successfully load the subscriber.
-
-> **NOTE:** The specification for a given event stream **must** be consulted
-> before implementing the callback handlers for various trace types.
+> **NOTE:** Subscribers must implement `xptiTraceInit` and `xptiTraceFinish`.
+> Optionally, implement `xptiQuerySubscriberStreamDetailLevel` to control detail level.
+> Consult stream specification before implementing callback handlers.
 
 ### Using the Reference Dispatcher and Subscriber
 
@@ -698,6 +722,91 @@ void function1() {
   }
 }
 ```
+
+### Stream Detail Level Control
+
+Subscribers can request different detail levels per stream to control optional data emission.
+Effective level is the max across all subscribers.
+
+#### Detail Level Enum
+
+The `xpti::stream_detail_level_t` enum defines four ordered levels:
+
+```cpp
+enum class stream_detail_level_t : uint8_t {
+  XPTI_STREAM_DETAIL_LEVEL_NONE = 0,     // No optional data
+  XPTI_STREAM_DETAIL_LEVEL_BASIC = 1,    // Basic optional data
+  XPTI_STREAM_DETAIL_LEVEL_NORMAL = 2,   // Normal detail (default)
+  XPTI_STREAM_DETAIL_LEVEL_VERBOSE = 3   // Maximum detail
+};
+```
+
+The values are ordered to support threshold checks in producer code:
+
+```cpp
+auto level = xptiGetEffectiveStreamDetailLevel(stream_id);
+if (level >= xpti::stream_detail_level_t::XPTI_STREAM_DETAIL_LEVEL_NORMAL) {
+  // Emit normal-level optional data
+}
+if (level >= xpti::stream_detail_level_t::XPTI_STREAM_DETAIL_LEVEL_VERBOSE) {
+  // Emit verbose-level optional data
+}
+```
+
+#### Aggregation Rule
+
+Effective level = max across all subscribers. Defaults to NORMAL if not set.
+
+#### Subscriber Usage
+
+```cpp
+XPTI_CALLBACK_API bool xptiQuerySubscriberStreamDetailLevel(
+    const char *stream_name, xpti::stream_detail_level_t *level) {
+  if (!level) return false;
+  if (std::string(stream_name) == "sycl") {
+    *level = xpti::stream_detail_level_t::XPTI_STREAM_DETAIL_LEVEL_VERBOSE;
+  } else {
+    *level = xpti::stream_detail_level_t::XPTI_STREAM_DETAIL_LEVEL_NORMAL;
+  }
+  return true;
+}
+```
+
+#### Producer Usage
+
+Producers should query the effective detail level before emitting optional data:
+
+```cpp
+void emit_trace_data(xpti::stream_id_t stream_id, const TraceData& data) {
+  // Always emit essential trace points
+  xptiNotifySubscribers(stream_id, trace_type, parent, event, instance, &data);
+
+  // Check if we should emit optional metadata
+  auto level = xptiGetEffectiveStreamDetailLevel(stream_id);
+
+  if (level >= xpti::stream_detail_level_t::XPTI_STREAM_DETAIL_LEVEL_NORMAL) {
+    // Emit normal-level optional metadata
+    xpti::object_id_t value_id = xptiRegisterObject(&data.optional_info,
+                                                     sizeof(data.optional_info),
+                                                     0);
+    xptiAddMetadata(event, "optional_info", value_id);
+  }
+
+  if (level >= xpti::stream_detail_level_t::XPTI_STREAM_DETAIL_LEVEL_VERBOSE) {
+    // Emit verbose-level optional metadata (potentially expensive)
+    compute_and_emit_detailed_analysis(event);
+  }
+}
+```
+
+#### API Reference
+
+##### `xptiQuerySubscriberStreamDetailLevel` (Subscriber Callback)
+Optional callback queried during stream init. Returns requested detail level per stream.
+Defaults to NORMAL if not implemented.
+
+##### `xptiGetEffectiveStreamDetailLevel`
+Returns max detail level across all subscribers for a stream. Lock-free; suitable for hot paths.
 
 ## Performance of the Framework
 
