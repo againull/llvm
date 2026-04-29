@@ -88,10 +88,15 @@ struct FastKernelSubcacheT {
 class DeviceKernelInfo : public CompileTimeKernelInfoTy {
 public:
   DeviceKernelInfo(const CompileTimeKernelInfoTy &Info,
-                   std::optional<sycl::kernel_id> KernelID = std::nullopt);
+                   std::optional<sycl::kernel_id> KernelID = std::nullopt,
+                   const void *GroupID = nullptr,
+                   void *ModuleHandle = nullptr);
 
   void init(std::string_view KernelName);
-  void setCompileTimeInfoIfNeeded(const CompileTimeKernelInfoTy &Info);
+  // Returns true if compile-time info was already set and matches, or was
+  // successfully set. Returns false if info conflicts (different kernel with
+  // same name from a different compilation unit).
+  bool setCompileTimeInfoIfNeeded(const CompileTimeKernelInfoTy &Info);
 
   FastKernelSubcacheT &getKernelSubcache() { return MFastKernelSubcache; }
 
@@ -119,8 +124,10 @@ public:
 
   int &getRefCount() { return RefCount; }
 
-  // Returns the demangled kernel name, caching the result to avoid repeated
-  // demangling overhead.
+  const void *getGroupID() const { return MGroupID; }
+
+  void *getModuleHandle() const { return MModuleHandle; }
+
   std::string_view getDemangledName() const;
 
 private:
@@ -134,6 +141,14 @@ private:
   // Used for checking if the last image referencing the kernel name
   // is removed in order to trigger cleanup of this struct.
   int RefCount = 0;
+  // Identifies the registration group (sycl_device_binaries) this entry
+  // belongs to. Images from the same group are from the same compilation unit
+  // (e.g. SPIRV+AOT variants of the same kernel).
+  const void *MGroupID = nullptr;
+  // OS module handle (dli_fbase on Linux) resolved from GroupID at
+  // construction. Used to match against caller-side anchors without
+  // repeated dladdr calls in the lookup loop.
+  void *MModuleHandle = nullptr;
   // Cached demangled kernel name for instrumentation
   mutable std::string MDemangledName;
   mutable std::once_flag MDemangledNameInitFlag;

@@ -362,7 +362,10 @@ private:
                             "a single kernel or explicit memory operation.");
   }
 
-  template <class Kernel> void setDeviceKernelInfo(void *KernelFuncPtr) {
+  // Hidden visibility ensures each DSO gets its own instantiation, preventing
+  // the dynamic linker from merging them and breaking per-DSO disambiguation.
+  template <class Kernel>
+  __SYCL_DLL_LOCAL void setDeviceKernelInfo(void *KernelFuncPtr) {
     constexpr auto Info = detail::CompileTimeKernelInfo<Kernel>;
     MKernelName = Info.Name;
     setKernelFunc(KernelFuncPtr);

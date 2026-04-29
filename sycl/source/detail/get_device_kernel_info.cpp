@@ -15,8 +15,18 @@ namespace sycl {
 inline namespace _V1 {
 namespace detail {
 
-DeviceKernelInfo &getDeviceKernelInfo(const CompileTimeKernelInfoTy &Info) {
-  return ProgramManager::getInstance().getDeviceKernelInfo(Info);
+__SYCL_EXPORT DeviceKernelInfo &getDeviceKernelInfo(
+    const CompileTimeKernelInfoTy &Info, const void *CallerAnchor) {
+  return ProgramManager::getInstance().getDeviceKernelInfo(Info, CallerAnchor);
+}
+
+// Kept as a separate exported symbol for binary compatibility with user
+// libraries built against older SYCL headers that didn't pass a caller
+// anchor. Such callers don't participate in per-DSO disambiguation and will
+// fall back to compile-time-info matching.
+__SYCL_EXPORT DeviceKernelInfo &
+getDeviceKernelInfo(const CompileTimeKernelInfoTy &Info) {
+  return ProgramManager::getInstance().getDeviceKernelInfo(Info, nullptr);
 }
 
 } // namespace detail

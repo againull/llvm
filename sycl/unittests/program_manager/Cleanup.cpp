@@ -50,7 +50,9 @@ public:
     return NativePrograms;
   }
 
-  std::unordered_map<std::string_view, sycl::detail::DeviceKernelInfo> &
+  std::unordered_map<std::string_view,
+                     std::vector<std::unique_ptr<sycl::detail::DeviceKernelInfo>>>
+      &
   getDeviceKernelInfoMap() {
     return m_DeviceKernelInfoMap;
   }
@@ -430,5 +432,131 @@ TEST(ImageRemoval, DeviceGlobalInitializerCleanupOnRemoveImages) {
 
   EXPECT_EQ(CtxImpl->getDeviceGlobalNotInitializedCnt(), 1u)
       << "Counter should be 1 after re-registering the reused program handle";
+}
+// Verify that kernels with the same name from different sycl_device_binaries
+// (i.e. different shared libraries / compilation units) get separate
+// DeviceKernelInfo entries with distinct kernel_ids. This prevents the
+// "UR_RESULT_ERROR_INVALID_KERNEL_ARGUMENT_SIZE" bug that occurred when
+// two .so files define kernels with the same class name but different
+// argument layouts.
+TEST(ImageRemoval, SameKernelNameDifferentGroups) {
+  ProgramManagerExposed PM;
+
+  // Create two images with the same kernel name "Kernel_A" but register
+  // them via separate sycl_device_binaries (simulating different .so files).
+  auto Img1 = generateImageKernelOnly("A");
+  auto Img2 = generateImageKernelOnly("A");
+
+  sycl_device_binary_struct NativeImage1;
+  NativeImage1 = Img1.convertToNativeType();
+  sycl_device_binaries_struct Binaries1{
+      SYCL_DEVICE_BINARIES_VERSION, 1, &NativeImage1, nullptr, nullptr};
+  PM.addImages(&Binaries1);
+
+  sycl_device_binary_struct NativeImage2;
+  NativeImage2 = Img2.convertToNativeType();
+  sycl_device_binaries_struct Binaries2{
+      SYCL_DEVICE_BINARIES_VERSION, 1, &NativeImage2, nullptr, nullptr};
+  PM.addImages(&Binaries2);
+
+  // The map should have one key ("Kernel_A") but two entries in the vector.
+  auto &DKIMap = PM.getDeviceKernelInfoMap();
+  std::string KernelName = generateRefName("A", "Kernel");
+  ASSERT_EQ(DKIMap.count(KernelName), 1u);
+  ASSERT_EQ(DKIMap[KernelName].size(), 2u)
+      << "Two separate groups should produce two DeviceKernelInfo entries";
+
+  // The two entries should have different kernel_ids.
+  auto &Entry0 = DKIMap[KernelName][0];
+  auto &Entry1 = DKIMap[KernelName][1];
+  EXPECT_NE(Entry0->getKernelID(), Entry1->getKernelID())
+      << "Entries from different groups must have distinct kernel_ids";
+
+  // Each entry should have exactly one image mapped to its kernel_id.
+  auto &KID2Img = PM.getKernelID2BinImage();
+  EXPECT_EQ(KID2Img.count(Entry0->getKernelID()), 1u);
+  EXPECT_EQ(KID2Img.count(Entry1->getKernelID()), 1u);
+
+  // Remove one group and verify the other survives.
+  PM.removeImages(&Binaries2);
+  ASSERT_EQ(DKIMap.count(KernelName), 1u);
+  ASSERT_EQ(DKIMap[KernelName].size(), 1u)
+      << "Only one entry should remain after removing one group";
+  EXPECT_EQ(KID2Img.count(DKIMap[KernelName][0]->getKernelID()), 1u);
+
+  // Remove the last group.
+  PM.removeImages(&Binaries1);
+  EXPECT_EQ(DKIMap.count(KernelName), 0u)
+      << "Map entry should be fully removed when last group is removed";
+}
+
+// Verify that images from the SAME sycl_device_binaries (SPIRV+AOT case)
+// share a single DeviceKernelInfo entry and kernel_id.
+TEST(ImageRemoval, SameKernelNameSameGroup) {
+  ProgramManagerExposed PM;
+
+  auto Img1 = generateImageKernelOnly("A");
+  auto Img2 = generateImageKernelOnly("A");
+
+  // Register both images under the same sycl_device_binaries.
+  sycl_device_binary_struct NativeImages[2];
+  NativeImages[0] = Img1.convertToNativeType();
+  NativeImages[1] = Img2.convertToNativeType();
+  sycl_device_binaries_struct Binaries{
+      SYCL_DEVICE_BINARIES_VERSION, 2, NativeImages, nullptr, nullptr};
+  PM.addImages(&Binaries);
+
+  auto &DKIMap = PM.getDeviceKernelInfoMap();
+  std::string KernelName = generateRefName("A", "Kernel");
+  ASSERT_EQ(DKIMap.count(KernelName), 1u);
+  ASSERT_EQ(DKIMap[KernelName].size(), 1u)
+      << "Same group should produce only one DeviceKernelInfo entry";
+
+  // Both images should be mapped under the same kernel_id.
+  auto &Entry = DKIMap[KernelName][0];
+  auto &KID2Img = PM.getKernelID2BinImage();
+  EXPECT_EQ(KID2Img.count(Entry->getKernelID()), 2u)
+      << "Both images from the same group should share one kernel_id";
+}
+// Two groups registering kernels with the same name and identical
+// compile-time info must produce separate DeviceKernelInfo entries so each
+// DSO can look up its own image. Full cross-DSO disambiguation via
+// dladdr is covered by SharedLib/kernel_name_collision_same_layout.cpp
+// since it requires a multi-DSO process.
+TEST(ImageRemoval, SameKernelNameSameLayoutDifferentGroups) {
+  ProgramManagerExposed PM;
+
+  auto Img1 = generateImageKernelOnly("A");
+  auto Img2 = generateImageKernelOnly("A");
+
+  sycl_device_binary_struct NativeImage1;
+  NativeImage1 = Img1.convertToNativeType();
+  sycl_device_binaries_struct Binaries1{
+      SYCL_DEVICE_BINARIES_VERSION, 1, &NativeImage1, nullptr, nullptr};
+  PM.addImages(&Binaries1);
+
+  sycl_device_binary_struct NativeImage2;
+  NativeImage2 = Img2.convertToNativeType();
+  sycl_device_binaries_struct Binaries2{
+      SYCL_DEVICE_BINARIES_VERSION, 1, &NativeImage2, nullptr, nullptr};
+  PM.addImages(&Binaries2);
+
+  auto &DKIMap = PM.getDeviceKernelInfoMap();
+  std::string KernelName = generateRefName("A", "Kernel");
+  ASSERT_EQ(DKIMap[KernelName].size(), 2u);
+
+  auto &Entry0 = DKIMap[KernelName][0];
+  auto &Entry1 = DKIMap[KernelName][1];
+  EXPECT_NE(Entry0->getKernelID(), Entry1->getKernelID());
+
+  sycl::detail::CompileTimeKernelInfoTy Info;
+  Info.Name = sycl::detail::string_view{KernelName};
+  Info.NumParams = 0;
+  Info.IsESIMD = false;
+  Info.KernelSize = 64;
+  Info.HasSpecialCaptures = false;
+
+  auto &ResultNoAnchor = PM.getDeviceKernelInfo(Info, /*CallerAnchor=*/nullptr);
+  EXPECT_EQ(&ResultNoAnchor, Entry0.get());
 }
 } // anonymous namespace

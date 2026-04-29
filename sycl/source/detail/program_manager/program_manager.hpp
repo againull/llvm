@@ -163,10 +163,12 @@ public:
   /// \param Context the context to build the program with
   /// \param Device the device for which the program is built
   /// \param KernelName the kernel's name
-  Managed<ur_program_handle_t> getBuiltURProgram(context_impl &ContextImpl,
-                                                 device_impl &DeviceImpl,
-                                                 std::string_view KernelName,
-                                                 const NDRDescT &NDRDesc = {});
+  /// When KernelID is provided, the image is looked up directly by kernel_id.
+  /// Otherwise, it is resolved from the kernel name.
+  Managed<ur_program_handle_t> getBuiltURProgram(
+      context_impl &ContextImpl, device_impl &DeviceImpl,
+      std::string_view KernelName, const NDRDescT &NDRDesc = {},
+      std::optional<kernel_id> KernelID = std::nullopt);
 
   /// Builds a program from a given set of images or retrieves that program from
   /// cache.
@@ -201,7 +203,9 @@ public:
   ur_program_handle_t getUrProgramFromUrKernel(ur_kernel_handle_t Kernel,
                                                context_impl &Context);
 
-  void addImage(sycl_device_binary RawImg, bool RegisterImgExports = true,
+  void addImage(sycl_device_binary RawImg,
+                sycl_device_binaries GroupDesc = nullptr,
+                bool RegisterImgExports = true,
                 RTDeviceBinaryImage **OutImage = nullptr,
                 std::vector<kernel_id> *OutKernelIDs = nullptr);
   void addImages(sycl_device_binaries DeviceImages);
@@ -219,15 +223,17 @@ public:
 
   // The function returns the unique SYCL kernel identifier associated with a
   // kernel name or nullopt if there is no such ID.
+  // When multiple entries exist for the same name (different compilation units),
+  // returns the first entry's kernel ID.
   std::optional<kernel_id>
   tryGetSYCLKernelID(std::string_view KernelName) const {
     std::lock_guard<std::mutex> Guard(m_DeviceKernelInfoMapMutex);
 
     auto It = m_DeviceKernelInfoMap.find(KernelName);
-    if (It == m_DeviceKernelInfoMap.end())
+    if (It == m_DeviceKernelInfoMap.end() || It->second.empty())
       return std::nullopt;
 
-    return It->second.getKernelID();
+    return It->second.front()->getKernelID();
   }
 
   // The function returns the unique SYCL kernel identifier associated with a
@@ -368,9 +374,12 @@ public:
 
   SanitizerType kernelUsesSanitizer() const { return m_SanitizerFoundInImage; }
 
-  void cacheKernelImplicitLocalArg(const RTDeviceBinaryImage &Img);
-  void cacheKernelWorkGroupDynamicLocalMem(const RTDeviceBinaryImage &Img);
-  DeviceKernelInfo &getDeviceKernelInfo(const CompileTimeKernelInfoTy &Info);
+  void cacheKernelImplicitLocalArg(const RTDeviceBinaryImage &Img,
+                                   const void *GroupID);
+  void cacheKernelWorkGroupDynamicLocalMem(const RTDeviceBinaryImage &Img,
+                                            const void *GroupID);
+  DeviceKernelInfo &getDeviceKernelInfo(const CompileTimeKernelInfoTy &Info,
+                                        const void *CallerAnchor = nullptr);
   DeviceKernelInfo &getDeviceKernelInfo(std::string_view KernelName);
   DeviceKernelInfo *tryGetDeviceKernelInfo(std::string_view KernelName);
 
@@ -509,7 +518,12 @@ protected:
 
   // Map for storing device kernel information. Runtime lookup should be avoided
   // by caching the pointers when possible.
-  std::unordered_map<std::string_view, DeviceKernelInfo> m_DeviceKernelInfoMap;
+  // Multiple entries per kernel name are possible when different compilation
+  // units (shared libraries) define kernels with the same name but different
+  // argument layouts.
+  std::unordered_map<std::string_view,
+                     std::vector<std::unique_ptr<DeviceKernelInfo>>>
+      m_DeviceKernelInfoMap;
 
   // Protects m_DeviceKernelInfoMap.
   mutable std::mutex m_DeviceKernelInfoMapMutex;
