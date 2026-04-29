@@ -44,9 +44,39 @@
 #include <string>
 #include <variant>
 
+#if defined(__SYCL_RT_OS_LINUX) || defined(__SYCL_RT_OS_DARWIN)
+#include <dlfcn.h>
+#elif defined(__SYCL_RT_OS_WINDOWS)
+#include <Windows.h>
+#endif
+
 namespace sycl {
 inline namespace _V1 {
 namespace detail {
+
+// Returns an opaque handle identifying the OS module (shared library or
+// executable) that contains the address \p Addr. Returns nullptr if the
+// lookup fails. Used to disambiguate same-named kernels from different DSOs.
+static void *getOSModuleHandle(const void *Addr) {
+  if (!Addr)
+    return nullptr;
+#if defined(__SYCL_RT_OS_LINUX) || defined(__SYCL_RT_OS_DARWIN)
+  Dl_info Info;
+  if (dladdr(Addr, &Info) == 0)
+    return nullptr;
+  return Info.dli_fbase;
+#elif defined(__SYCL_RT_OS_WINDOWS)
+  HMODULE Module = nullptr;
+  DWORD Flag = GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT;
+  if (!GetModuleHandleExA(Flag, reinterpret_cast<LPCSTR>(Addr), &Module))
+    return nullptr;
+  return reinterpret_cast<void *>(Module);
+#else
+  (void)Addr;
+  return nullptr;
+#endif
+}
 
 static constexpr int DbgProgMgr = 0;
 
@@ -817,7 +847,8 @@ static void setSpecializationConstants(device_image_impl &InputImpl,
 // its ref count incremented.
 Managed<ur_program_handle_t> ProgramManager::getBuiltURProgram(
     context_impl &ContextImpl, device_impl &DeviceImpl,
-    std::string_view KernelName, const NDRDescT &NDRDesc) {
+    std::string_view KernelName, const NDRDescT &NDRDesc,
+    std::optional<kernel_id> KernelID) {
   device_impl *BuildDev = &DeviceImpl;
   // Check if we can optimize program builds for sub-devices by using a program
   // built for the root device
@@ -838,8 +869,11 @@ Managed<ur_program_handle_t> ProgramManager::getBuiltURProgram(
       BuildDev = CandidateRoot;
   }
 
+  // When KernelID is provided, look up the image directly — this avoids
+  // ambiguity when multiple DSOs define kernels with the same name.
   const RTDeviceBinaryImage &Img =
-      getDeviceImage(KernelName, ContextImpl, *BuildDev);
+      KernelID ? getDeviceImage(*KernelID, KernelName, ContextImpl, *BuildDev)
+               : getDeviceImage(KernelName, ContextImpl, *BuildDev);
 
   // Check that device supports all aspects used by the kernel
   if (auto exception =
@@ -1076,8 +1110,9 @@ FastKernelCacheValPtr ProgramManager::getOrCreateKernel(
     }
   }
 
-  Managed<ur_program_handle_t> Program = getBuiltURProgram(
-      ContextImpl, DeviceImpl, DeviceKernelInfo.Name, NDRDesc);
+  Managed<ur_program_handle_t> Program =
+      getBuiltURProgram(ContextImpl, DeviceImpl, DeviceKernelInfo.Name, NDRDesc,
+                        DeviceKernelInfo.getKernelID());
   std::string_view KernelName = DeviceKernelInfo.Name;
   auto BuildF = [this, &Program, &KernelName, &ContextImpl] {
     adapter_impl &Adapter = ContextImpl.getAdapter();
@@ -1361,10 +1396,17 @@ ProgramManager::getDeviceImage(std::string_view KernelName,
   {
     std::lock_guard<std::mutex> Guard(m_DeviceKernelInfoMapMutex);
     if (auto It = m_DeviceKernelInfoMap.find(std::string(KernelName));
-        It != m_DeviceKernelInfoMap.end()) {
-      FoundKernelID = It->second.getKernelID();
-      Img = getBinImageFromMultiMap(m_KernelIDs2BinImage, *FoundKernelID,
+        It != m_DeviceKernelInfoMap.end() && !It->second.empty()) {
+      FoundKernelID = It->second.front()->getKernelID();
+      // Try all entries for this kernel name (there may be multiple from
+      // different DSOs).
+      for (auto &Entry : It->second) {
+        Img =
+            getBinImageFromMultiMap(m_KernelIDs2BinImage, Entry->getKernelID(),
                                     ContextImpl, DeviceImpl);
+        if (Img)
+          break;
+      }
     }
   }
 
@@ -1390,6 +1432,25 @@ ProgramManager::getDeviceImage(std::string_view KernelName,
     std::cerr << "selected device image: " << &Img->getRawData() << "\n";
     Img->print();
   }
+  return *Img;
+}
+
+const RTDeviceBinaryImage &ProgramManager::getDeviceImage(
+    const kernel_id &KernelID, std::string_view KernelName,
+    context_impl &ContextImpl, const device_impl &DeviceImpl) {
+  const RTDeviceBinaryImage *Img = nullptr;
+  {
+    std::lock_guard<std::mutex> Guard(m_ImgMapsMutex);
+    Img = getBinImageFromMultiMap(m_KernelIDs2BinImage, KernelID, ContextImpl,
+                                  DeviceImpl);
+  }
+  CheckAndDecompressImage(Img);
+  if (!Img)
+    throw exception(make_error_code(errc::runtime),
+                    "Kernel " + std::string(KernelName) +
+                        " has no image for the selected device. "
+                        "Its available images target: [" +
+                        getKernelTargetList(KernelID) + "].");
   return *Img;
 }
 
@@ -1548,8 +1609,14 @@ void ProgramManager::cacheKernelImplicitLocalArg(
   if (ImplicitLocalArgRange.isAvailable())
     for (auto Prop : ImplicitLocalArgRange) {
       auto It = m_DeviceKernelInfoMap.find(Prop->Name);
-      assert(It != m_DeviceKernelInfoMap.end());
-      It->second.setImplicitLocalArgPos(DeviceBinaryProperty(Prop).asUint32());
+      assert(It != m_DeviceKernelInfoMap.end() && !It->second.empty());
+      for (auto &Entry : It->second) {
+        auto [Begin, End] =
+            m_KernelIDs2BinImage.equal_range(Entry->getKernelID());
+        if (std::any_of(Begin, End,
+                        [&](const auto &P) { return P.second == &Img; }))
+          Entry->setImplicitLocalArgPos(DeviceBinaryProperty(Prop).asUint32());
+      }
     }
 }
 
@@ -1560,33 +1627,90 @@ void ProgramManager::cacheKernelWorkGroupDynamicLocalMem(
   if (WorkGroupDynamicLocalMemRange.isAvailable())
     for (auto Prop : WorkGroupDynamicLocalMemRange) {
       auto It = m_DeviceKernelInfoMap.find(Prop->Name);
-      assert(It != m_DeviceKernelInfoMap.end());
-      It->second.setWorkGroupDynamicLocalMem();
+      assert(It != m_DeviceKernelInfoMap.end() && !It->second.empty());
+      for (auto &Entry : It->second) {
+        auto [Begin, End] =
+            m_KernelIDs2BinImage.equal_range(Entry->getKernelID());
+        if (std::any_of(Begin, End,
+                        [&](const auto &P) { return P.second == &Img; }))
+          Entry->setWorkGroupDynamicLocalMem();
+      }
     }
 }
 
 DeviceKernelInfo &
-ProgramManager::getDeviceKernelInfo(const CompileTimeKernelInfoTy &Info) {
+ProgramManager::getDeviceKernelInfo(const CompileTimeKernelInfoTy &Info,
+                                    const void *CallerAnchor) {
   std::lock_guard<std::mutex> Guard(m_DeviceKernelInfoMapMutex);
   auto It = m_DeviceKernelInfoMap.find(std::string(Info.Name));
-  assert(It != m_DeviceKernelInfoMap.end());
-  It->second.setCompileTimeInfoIfNeeded(Info);
-  return It->second;
+  assert(It != m_DeviceKernelInfoMap.end() && !It->second.empty());
+
+  // Narrow down by caller DSO: two DSOs may register kernels with identical
+  // compile-time info but different bodies. The module handle (cached at
+  // registration) is compared against the caller's module.
+  void *CallerModule = CallerAnchor ? getOSModuleHandle(CallerAnchor) : nullptr;
+  if (CallerModule) {
+    for (auto &Entry : It->second) {
+      if (Entry->getModuleHandle() == CallerModule) {
+        [[maybe_unused]] bool Ok = Entry->setCompileTimeInfoIfNeeded(Info);
+        assert(Ok && "DeviceKernelInfo entry from the caller's DSO has "
+                     "compile-time info that conflicts with the caller's");
+        return *Entry;
+      }
+    }
+  }
+
+  // Fall back to compile-time-info matching when no anchor is available or
+  // the caller's module wasn't resolvable / didn't register the kernel.
+  for (auto &Entry : It->second) {
+    if (Entry->setCompileTimeInfoIfNeeded(Info))
+      return *Entry;
+  }
+
+  // All existing entries have conflicting compile-time info. This means a
+  // different kernel with the same name exists in another DSO.
+  // This shouldn't normally happen because addImage creates separate entries
+  // per module handle, but handle it defensively by returning the first entry.
+  assert(false && "No matching DeviceKernelInfo entry found for compile-time "
+                  "info - this indicates a bug in addImage");
+  return *It->second.front();
 }
 
 DeviceKernelInfo &
 ProgramManager::getDeviceKernelInfo(std::string_view KernelName) {
   std::lock_guard<std::mutex> Guard(m_DeviceKernelInfoMapMutex);
   auto It = m_DeviceKernelInfoMap.find(std::string(KernelName));
-  assert(It != m_DeviceKernelInfoMap.end());
-  return It->second;
+  assert(It != m_DeviceKernelInfoMap.end() && !It->second.empty());
+  return *It->second.front();
+}
+
+kernel_id ProgramManager::getSYCLKernelID(std::string_view KernelName,
+                                          const void *CallerAnchor) const {
+  std::lock_guard<std::mutex> Guard(m_DeviceKernelInfoMapMutex);
+
+  auto It = m_DeviceKernelInfoMap.find(std::string(KernelName));
+  if (It == m_DeviceKernelInfoMap.end() || It->second.empty())
+    throw exception(make_error_code(errc::runtime),
+                    "No kernel found with the specified name");
+
+  void *CallerModule = CallerAnchor ? getOSModuleHandle(CallerAnchor) : nullptr;
+  if (CallerModule) {
+    for (auto &Entry : It->second) {
+      if (Entry->getModuleHandle() == CallerModule)
+        return Entry->getKernelID();
+    }
+  }
+
+  return It->second.front()->getKernelID();
 }
 
 DeviceKernelInfo *
 ProgramManager::tryGetDeviceKernelInfo(std::string_view KernelName) {
   std::lock_guard<std::mutex> Guard(m_DeviceKernelInfoMapMutex);
   auto It = m_DeviceKernelInfoMap.find(std::string(KernelName));
-  return It != m_DeviceKernelInfoMap.end() ? &It->second : nullptr;
+  if (It == m_DeviceKernelInfoMap.end() || It->second.empty())
+    return nullptr;
+  return It->second.front().get();
 }
 
 static bool isBfloat16DeviceLibImage(sycl_device_binary RawImg,
@@ -1765,6 +1889,12 @@ void ProgramManager::addImage(sycl_device_binary RawImg,
       m_BinImg2KernelIDs[Img.get()];
   KernelIDs.reset(new std::vector<kernel_id>);
 
+  // Resolve the OS module handle for the DSO that owns this image. RawImg
+  // resides in the DSO's data section, so dladdr on it yields the correct
+  // module base. For JIT-compiled images (heap-allocated), this returns
+  // nullptr — each such image gets its own DeviceKernelInfo entry.
+  void *ModuleHandle = getOSModuleHandle(RawImg);
+
   std::lock_guard<std::mutex> DKIGuard(m_DeviceKernelInfoMapMutex);
 
   for (sycl_offload_entry EntriesIt = EntriesB; EntriesIt != EntriesE;
@@ -1778,21 +1908,33 @@ void ProgramManager::addImage(sycl_device_binary RawImg,
     if (m_ExportedSymbolImages.find(name) != m_ExportedSymbolImages.end())
       continue;
 
-    auto It = m_DeviceKernelInfoMap.find(name);
-    if (It == m_DeviceKernelInfoMap.end()) {
+    auto &Entries = m_DeviceKernelInfoMap[name];
+
+    // Look for an existing entry from the same DSO. This handles the
+    // SPIRV+AOT case where multiple images for the same kernel come from
+    // the same shared library.
+    DeviceKernelInfo *MatchingEntry = nullptr;
+    if (ModuleHandle) {
+      for (auto &Entry : Entries) {
+        if (Entry->getModuleHandle() == ModuleHandle) {
+          MatchingEntry = Entry.get();
+          break;
+        }
+      }
+    }
+
+    if (!MatchingEntry) {
       sycl::kernel_id KernelID = detail::createSyclObjFromImpl<sycl::kernel_id>(
           std::make_shared<detail::kernel_id_impl>(name));
       CompileTimeKernelInfoTy DefaultCompileTimeInfo{std::string_view(name)};
-      It = m_DeviceKernelInfoMap
-               .emplace(std::piecewise_construct, std::forward_as_tuple(name),
-                        std::forward_as_tuple(DefaultCompileTimeInfo, KernelID))
-               .first;
+      Entries.push_back(std::make_unique<DeviceKernelInfo>(
+          DefaultCompileTimeInfo, KernelID, ModuleHandle));
+      MatchingEntry = Entries.back().get();
     }
     m_KernelIDs2BinImage.insert(
-        std::make_pair(It->second.getKernelID(), Img.get()));
-    KernelIDs->push_back(It->second.getKernelID());
-    // Keep track of image to kernel name reference count for cleanup.
-    ++It->second.getRefCount();
+        std::make_pair(MatchingEntry->getKernelID(), Img.get()));
+    KernelIDs->push_back(MatchingEntry->getKernelID());
+    ++MatchingEntry->getRefCount();
   }
 
   // check if kernel uses sanitizer
@@ -1921,16 +2063,30 @@ void ProgramManager::removeImages(sycl_device_binaries DeviceBinary) {
       }
 
       auto DKIIt = m_DeviceKernelInfoMap.find(std::string(Name));
-      assert(DKIIt != m_DeviceKernelInfoMap.end());
-      removeFromMultimapByVal(m_KernelIDs2BinImage, DKIIt->second.getKernelID(),
-                              Img);
+      assert(DKIIt != m_DeviceKernelInfoMap.end() && !DKIIt->second.empty());
 
-      int &RefCount = DKIIt->second.getRefCount();
-      assert(RefCount > 0);
-      // Clean up the device kernel info instance if this is the last
-      // image referencing it.
-      if (--RefCount == 0) {
-        m_DeviceKernelInfoMap.erase(DKIIt);
+      // Find the specific entry whose kernel_id maps to this image.
+      auto &Entries = DKIIt->second;
+      for (auto EntryIt = Entries.begin(); EntryIt != Entries.end();
+           ++EntryIt) {
+        auto [RangeBegin, RangeEnd] =
+            m_KernelIDs2BinImage.equal_range((*EntryIt)->getKernelID());
+        bool Found = std::any_of(RangeBegin, RangeEnd, [&](const auto &Pair) {
+          return Pair.second == Img;
+        });
+        if (!Found)
+          continue;
+
+        removeFromMultimapByVal(m_KernelIDs2BinImage, (*EntryIt)->getKernelID(),
+                                Img);
+        int &RefCount = (*EntryIt)->getRefCount();
+        assert(RefCount > 0);
+        if (--RefCount == 0) {
+          Entries.erase(EntryIt);
+          if (Entries.empty())
+            m_DeviceKernelInfoMap.erase(DKIIt);
+        }
+        break;
       }
     }
 
@@ -2051,9 +2207,9 @@ std::vector<kernel_id> ProgramManager::getAllSYCLKernelIDs() {
   std::lock_guard<std::mutex> DKIGuard(m_DeviceKernelInfoMapMutex);
 
   std::vector<sycl::kernel_id> AllKernelIDs;
-  AllKernelIDs.reserve(m_DeviceKernelInfoMap.size());
-  for (const auto &Pair : m_DeviceKernelInfoMap) {
-    AllKernelIDs.push_back(Pair.second.getKernelID());
+  for (const auto &[Name, Entries] : m_DeviceKernelInfoMap) {
+    for (const auto &Entry : Entries)
+      AllKernelIDs.push_back(Entry->getKernelID());
   }
   return AllKernelIDs;
 }

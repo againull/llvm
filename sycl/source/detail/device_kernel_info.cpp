@@ -22,8 +22,10 @@ inline namespace _V1 {
 namespace detail {
 
 DeviceKernelInfo::DeviceKernelInfo(const CompileTimeKernelInfoTy &Info,
-                                   std::optional<sycl::kernel_id> KernelID)
-    : CompileTimeKernelInfoTy{Info}, MKernelID{std::move(KernelID)} {}
+                                   std::optional<sycl::kernel_id> KernelID,
+                                   void *ModuleHandle)
+    : CompileTimeKernelInfoTy{Info}, MKernelID{std::move(KernelID)},
+      MModuleHandle{ModuleHandle} {}
 
 template <typename OtherTy>
 inline constexpr bool operator==(const CompileTimeKernelInfoTy &LHS,
@@ -45,12 +47,13 @@ inline constexpr bool operator==(const CompileTimeKernelInfoTy &LHS,
          LHS.HasSpecialCaptures == RHS.HasSpecialCaptures;
 }
 
-void DeviceKernelInfo::setCompileTimeInfoIfNeeded(
+bool DeviceKernelInfo::setCompileTimeInfoIfNeeded(
     const CompileTimeKernelInfoTy &Info) {
-  if (!isCompileTimeInfoSet())
+  if (!isCompileTimeInfoSet()) {
     CompileTimeKernelInfoTy::operator=(Info);
-  assert(isCompileTimeInfoSet());
-  assert(Info == *this);
+    return true;
+  }
+  return Info == *this;
 }
 
 void DeviceKernelInfo::setImplicitLocalArgPos(int Pos) {

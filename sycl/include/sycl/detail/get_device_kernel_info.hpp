@@ -31,9 +31,13 @@ class DeviceKernelInfo;
 __SYCL_EXPORT DeviceKernelInfo &
 getDeviceKernelInfo(const CompileTimeKernelInfoTy &);
 
+__SYCL_EXPORT DeviceKernelInfo &
+getDeviceKernelInfo(const CompileTimeKernelInfoTy &, const void *CallerAnchor);
+
 template <class Kernel> DeviceKernelInfo &getDeviceKernelInfo() {
+  static char Anchor;
   static DeviceKernelInfo &Info =
-      getDeviceKernelInfo(CompileTimeKernelInfo<Kernel>);
+      getDeviceKernelInfo(CompileTimeKernelInfo<Kernel>, &Anchor);
   return Info;
 }
 

@@ -88,10 +88,14 @@ struct FastKernelSubcacheT {
 class DeviceKernelInfo : public CompileTimeKernelInfoTy {
 public:
   DeviceKernelInfo(const CompileTimeKernelInfoTy &Info,
-                   std::optional<sycl::kernel_id> KernelID = std::nullopt);
+                   std::optional<sycl::kernel_id> KernelID = std::nullopt,
+                   void *ModuleHandle = nullptr);
 
   void init(std::string_view KernelName);
-  void setCompileTimeInfoIfNeeded(const CompileTimeKernelInfoTy &Info);
+  // Returns true if compile-time info was already set and matches, or was
+  // successfully set. Returns false if info conflicts (different kernel with
+  // same name from a different compilation unit).
+  bool setCompileTimeInfoIfNeeded(const CompileTimeKernelInfoTy &Info);
 
   FastKernelSubcacheT &getKernelSubcache() { return MFastKernelSubcache; }
 
@@ -119,6 +123,8 @@ public:
 
   int &getRefCount() { return RefCount; }
 
+  void *getModuleHandle() const { return MModuleHandle; }
+
   // Returns the demangled kernel name, caching the result to avoid repeated
   // demangling overhead.
   std::string_view getDemangledName() const;
@@ -134,6 +140,9 @@ private:
   // Used for checking if the last image referencing the kernel name
   // is removed in order to trigger cleanup of this struct.
   int RefCount = 0;
+  // OS module handle identifying the DSO this kernel was registered from. Used
+  // to disambiguate same-named kernels from different shared libraries.
+  void *MModuleHandle = nullptr;
   // Cached demangled kernel name for instrumentation
   mutable std::string MDemangledName;
   mutable std::once_flag MDemangledNameInitFlag;

@@ -1,0 +1,11 @@
+// REQUIRES: linux
+//
+// RUN: rm -rf %t.dir && mkdir -p %t.dir
+// RUN: %{build} -DBUILD_LIB_ADD -Wl,-Bsymbolic -fPIC -shared -o %t.dir/lib_add.so
+// RUN: %{build} -DBUILD_LIB_MUL -Wl,-Bsymbolic -fPIC -shared -o %t.dir/lib_mul.so
+// RUN: %{build} -DBUILD_MAIN -Wl,-Bsymbolic -DLIB_DIR=%t.dir -ldl -o %t.out
+// RUN: %{run} %t.out
+
+#define DLOPEN_FLAGS (RTLD_NOW | RTLD_GLOBAL)
+#define KERNEL_CLASS_DECL class KernelFunctor;
+#include "../kernel_name_collision_same_layout.inc"
