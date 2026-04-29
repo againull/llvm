@@ -1,0 +1,133 @@
+// Shared test body for free function kernel name collision tests.
+// Included by variant-specific .cpp files that define:
+//   DLOPEN_FLAGS - dlopen flags (e.g. RTLD_NOW | RTLD_LOCAL)
+//
+// This test verifies that two shared libraries defining free function SYCL
+// kernels with the same name but different bodies work correctly when loaded
+// into the same process.
+
+#include <sycl/detail/core.hpp>
+#include <sycl/ext/oneapi/experimental/enqueue_functions.hpp>
+#include <sycl/ext/oneapi/experimental/free_function_traits.hpp>
+#include <sycl/ext/oneapi/free_function_queries.hpp>
+#include <sycl/usm.hpp>
+
+#include <cassert>
+#include <cstdio>
+
+namespace syclexp = sycl::ext::oneapi::experimental;
+
+#ifdef BUILD_LIB_ADD
+SYCL_EXT_ONEAPI_FUNCTION_PROPERTY((syclexp::nd_range_kernel<1>))
+void my_kernel(float *out, float *in) {
+  size_t i =
+      sycl::ext::oneapi::this_work_item::get_nd_item<1>().get_global_linear_id();
+  out[i] = in[i] + 1.0f;
+}
+
+extern "C" __attribute__((visibility("default"))) int run_add(sycl::queue *q) {
+  constexpr int N = 64;
+  float *out = sycl::malloc_device<float>(N, *q);
+  float *in = sycl::malloc_device<float>(N, *q);
+  q->fill(in, 1.0f, N).wait();
+  q->memset(out, 0, N * sizeof(float)).wait();
+
+  q->submit([&](sycl::handler &cgh) {
+     syclexp::nd_launch(
+         cgh,
+         sycl::nd_range<1>(sycl::range<1>(N), sycl::range<1>(N)),
+         syclexp::kernel_function<my_kernel>, out, in);
+   }).wait();
+
+  std::vector<float> result(N);
+  q->memcpy(result.data(), out, N * sizeof(float)).wait();
+  sycl::free(out, *q);
+  sycl::free(in, *q);
+
+  for (int i = 0; i < N; ++i) {
+    if (result[i] != 2.0f)
+      return -1;
+  }
+  return 0;
+}
+#endif
+
+#ifdef BUILD_LIB_MUL
+SYCL_EXT_ONEAPI_FUNCTION_PROPERTY((syclexp::nd_range_kernel<1>))
+void my_kernel(float *out, float *in) {
+  size_t i =
+      sycl::ext::oneapi::this_work_item::get_nd_item<1>().get_global_linear_id();
+  out[i] = in[i] * 3.0f;
+}
+
+extern "C" __attribute__((visibility("default"))) int run_mul(sycl::queue *q) {
+  constexpr int N = 64;
+  float *out = sycl::malloc_device<float>(N, *q);
+  float *in = sycl::malloc_device<float>(N, *q);
+  q->fill(in, 1.0f, N).wait();
+  q->memset(out, 0, N * sizeof(float)).wait();
+
+  q->submit([&](sycl::handler &cgh) {
+     syclexp::nd_launch(
+         cgh,
+         sycl::nd_range<1>(sycl::range<1>(N), sycl::range<1>(N)),
+         syclexp::kernel_function<my_kernel>, out, in);
+   }).wait();
+
+  std::vector<float> result(N);
+  q->memcpy(result.data(), out, N * sizeof(float)).wait();
+  sycl::free(out, *q);
+  sycl::free(in, *q);
+
+  for (int i = 0; i < N; ++i) {
+    if (result[i] != 3.0f)
+      return -1;
+  }
+  return 0;
+}
+#endif
+
+#ifdef BUILD_MAIN
+#include <dlfcn.h>
+
+#define STRINGIFY_HELPER(A) #A
+#define STRINGIFY(A) STRINGIFY_HELPER(A)
+
+using fn_t = int (*)(sycl::queue *);
+
+int main() {
+  sycl::queue q;
+
+  void *h_add = dlopen(STRINGIFY(LIB_DIR) "/lib_add.so", DLOPEN_FLAGS);
+  if (!h_add) {
+    std::fprintf(stderr, "Failed to load lib_add.so: %s\n", dlerror());
+    return 1;
+  }
+  void *h_mul = dlopen(STRINGIFY(LIB_DIR) "/lib_mul.so", DLOPEN_FLAGS);
+  if (!h_mul) {
+    std::fprintf(stderr, "Failed to load lib_mul.so: %s\n", dlerror());
+    return 1;
+  }
+
+  auto *fn_add = (fn_t)dlsym(h_add, "run_add");
+  auto *fn_mul = (fn_t)dlsym(h_mul, "run_mul");
+  if (!fn_add || !fn_mul) {
+    std::fprintf(stderr, "Failed to find symbols\n");
+    return 1;
+  }
+
+  int rc_add = fn_add(&q);
+  int rc_mul = fn_mul(&q);
+
+  std::printf("add kernel (expect 2.0): %s\n", rc_add == 0 ? "PASS" : "FAIL");
+  std::printf("mul kernel (expect 3.0): %s\n", rc_mul == 0 ? "PASS" : "FAIL");
+
+  assert(rc_add == 0 && "add kernel produced wrong results");
+  assert(rc_mul == 0 && "mul kernel produced wrong results");
+
+  dlclose(h_add);
+  dlclose(h_mul);
+
+  return 0;
+}
+#endif
