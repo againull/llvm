@@ -245,6 +245,11 @@ public:
                     "No kernel found with the specified name");
   }
 
+  // Returns the kernel_id for the entry matching the caller's DSO (by module
+  // handle). Falls back to first entry if no match found.
+  kernel_id getSYCLKernelID(std::string_view KernelName,
+                            const void *CallerAnchor) const;
+
   // The function returns a vector containing all unique SYCL kernel identifiers
   // in SYCL device images.
   std::vector<kernel_id> getAllSYCLKernelIDs();

@@ -345,7 +345,7 @@ public:
   template <
       typename KernelName, bundle_state _State = State,
       typename = std::enable_if_t<_State != bundle_state::ext_oneapi_source>>
-  bool has_kernel() const noexcept {
+  __SYCL_DLL_LOCAL bool has_kernel() const noexcept {
     return has_kernel(get_kernel_id<KernelName>());
   }
 
@@ -354,7 +354,7 @@ public:
   template <
       typename KernelName, bundle_state _State = State,
       typename = std::enable_if_t<_State != bundle_state::ext_oneapi_source>>
-  bool has_kernel(const device &Dev) const noexcept {
+  __SYCL_DLL_LOCAL bool has_kernel(const device &Dev) const noexcept {
     return has_kernel(get_kernel_id<KernelName>(), Dev);
   }
 
@@ -396,7 +396,7 @@ public:
   /// KernelName.
   template <typename KernelName, bundle_state _State = State,
             typename = std::enable_if_t<_State == bundle_state::executable>>
-  kernel get_kernel() const {
+  __SYCL_DLL_LOCAL kernel get_kernel() const {
     return detail::kernel_bundle_plain::get_kernel(get_kernel_id<KernelName>());
   }
 
@@ -472,21 +472,24 @@ public:
   }
 
   template <auto *Func>
-  std::enable_if_t<ext::oneapi::experimental::is_kernel_v<Func>, bool>
-  ext_oneapi_has_kernel() {
+  __SYCL_DLL_LOCAL
+      std::enable_if_t<ext::oneapi::experimental::is_kernel_v<Func>, bool>
+      ext_oneapi_has_kernel() {
     return has_kernel(ext::oneapi::experimental::get_kernel_id<Func>());
   }
 
   template <auto *Func>
-  std::enable_if_t<ext::oneapi::experimental::is_kernel_v<Func>, bool>
-  ext_oneapi_has_kernel(const device &dev) {
+  __SYCL_DLL_LOCAL
+      std::enable_if_t<ext::oneapi::experimental::is_kernel_v<Func>, bool>
+      ext_oneapi_has_kernel(const device &dev) {
     return has_kernel(ext::oneapi::experimental::get_kernel_id<Func>(), dev);
   }
 
   template <auto *Func, bundle_state _State = State,
             typename = std::enable_if_t<_State == bundle_state::executable>>
-  std::enable_if_t<ext::oneapi::experimental::is_kernel_v<Func>, kernel>
-  ext_oneapi_get_kernel() {
+  __SYCL_DLL_LOCAL
+      std::enable_if_t<ext::oneapi::experimental::is_kernel_v<Func>, kernel>
+      ext_oneapi_get_kernel() {
     return detail::kernel_bundle_plain::get_kernel(
         ext::oneapi::experimental::get_kernel_id<Func>());
   }
@@ -583,14 +586,17 @@ namespace detail {
 // Internal non-template versions of get_kernel_id API which is used by public
 // onces
 __SYCL_EXPORT kernel_id get_kernel_id_impl(string_view KernelName);
+__SYCL_EXPORT kernel_id get_kernel_id_impl(string_view KernelName, const void *Anchor);
 } // namespace detail
 
 /// \returns the kernel_id associated with the KernelName
-template <typename KernelName> kernel_id get_kernel_id() {
+template <typename KernelName>
+__SYCL_DLL_LOCAL kernel_id get_kernel_id() {
   // FIXME: This must fail at link-time if KernelName not in any available
   // translation units.
   return detail::get_kernel_id_impl(
-      detail::CompileTimeKernelInfo<KernelName>.Name);
+      detail::CompileTimeKernelInfo<KernelName>.Name,
+      detail::CompileTimeKernelInfo<KernelName>.Name.data());
 }
 
 /// \returns a vector with all kernel_id's defined in the application
@@ -673,27 +679,27 @@ get_kernel_bundle(const context &Ctx, const std::vector<kernel_id> &KernelIDs) {
 }
 
 template <typename KernelName, bundle_state State>
-kernel_bundle<State> get_kernel_bundle(const context &Ctx) {
+__SYCL_DLL_LOCAL kernel_bundle<State> get_kernel_bundle(const context &Ctx) {
   return get_kernel_bundle<State>(Ctx, Ctx.get_devices(),
                                   {get_kernel_id<KernelName>()});
 }
 
 template <typename KernelName, bundle_state State>
-kernel_bundle<State> get_kernel_bundle(const context &Ctx,
-                                       const std::vector<device> &Devs) {
+__SYCL_DLL_LOCAL kernel_bundle<State>
+get_kernel_bundle(const context &Ctx, const std::vector<device> &Devs) {
   return get_kernel_bundle<State>(Ctx, Devs, {get_kernel_id<KernelName>()});
 }
 
 // For free functions.
 namespace ext::oneapi::experimental {
 template <auto *Func, bundle_state State>
-std::enable_if_t<is_kernel_v<Func>, kernel_bundle<State>>
+__SYCL_DLL_LOCAL std::enable_if_t<is_kernel_v<Func>, kernel_bundle<State>>
 get_kernel_bundle(const context &Ctx, const std::vector<device> &Devs) {
   return get_kernel_bundle<State>(Ctx, Devs, {get_kernel_id<Func>()});
 }
 
 template <auto *Func, bundle_state State>
-std::enable_if_t<is_kernel_v<Func>, kernel_bundle<State>>
+__SYCL_DLL_LOCAL std::enable_if_t<is_kernel_v<Func>, kernel_bundle<State>>
 get_kernel_bundle(const context &Ctx) {
   return get_kernel_bundle<State>(Ctx, Ctx.get_devices(),
                                   {get_kernel_id<Func>()});
@@ -809,24 +815,25 @@ bool has_kernel_bundle(const context &Ctx,
 }
 
 template <typename KernelName, bundle_state State>
-bool has_kernel_bundle(const context &Ctx) {
+__SYCL_DLL_LOCAL bool has_kernel_bundle(const context &Ctx) {
   return has_kernel_bundle<State>(Ctx, {get_kernel_id<KernelName>()});
 }
 
 template <typename KernelName, bundle_state State>
-bool has_kernel_bundle(const context &Ctx, const std::vector<device> &Devs) {
+__SYCL_DLL_LOCAL bool has_kernel_bundle(const context &Ctx,
+                                        const std::vector<device> &Devs) {
   return has_kernel_bundle<State>(Ctx, Devs, {get_kernel_id<KernelName>()});
 }
 
 namespace ext::oneapi::experimental {
 template <auto *Func, bundle_state State>
-std::enable_if_t<is_kernel_v<Func>, bool>
+__SYCL_DLL_LOCAL std::enable_if_t<is_kernel_v<Func>, bool>
 has_kernel_bundle(const context &Ctx) {
   return has_kernel_bundle<State>(Ctx, {get_kernel_id<Func>()});
 }
 
 template <auto *Func, bundle_state State>
-std::enable_if_t<is_kernel_v<Func>, bool>
+__SYCL_DLL_LOCAL std::enable_if_t<is_kernel_v<Func>, bool>
 has_kernel_bundle(const context &Ctx, const std::vector<device> &Devs) {
   return has_kernel_bundle<State>(Ctx, Devs, {get_kernel_id<Func>()});
 }
@@ -841,13 +848,15 @@ has_kernel_bundle(const context &Ctx, const std::vector<device> &Devs) {
 __SYCL_EXPORT bool is_compatible(const std::vector<kernel_id> &KernelIDs,
                                  const device &Dev);
 
-template <typename KernelName> bool is_compatible(const device &Dev) {
+template <typename KernelName>
+__SYCL_DLL_LOCAL bool is_compatible(const device &Dev) {
   return is_compatible({get_kernel_id<KernelName>()}, Dev);
 }
 
 namespace ext::oneapi::experimental {
 template <auto *Func>
-std::enable_if_t<is_kernel_v<Func>, bool> is_compatible(const device &Dev) {
+__SYCL_DLL_LOCAL std::enable_if_t<is_kernel_v<Func>, bool>
+is_compatible(const device &Dev) {
   return is_compatible({get_kernel_id<Func>()}, Dev);
 }
 } // namespace ext::oneapi::experimental

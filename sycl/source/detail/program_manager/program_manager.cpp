@@ -1685,6 +1685,28 @@ ProgramManager::getDeviceKernelInfo(std::string_view KernelName) {
   return *It->second.front();
 }
 
+kernel_id
+ProgramManager::getSYCLKernelID(std::string_view KernelName,
+                                const void *CallerAnchor) const {
+  std::lock_guard<std::mutex> Guard(m_DeviceKernelInfoMapMutex);
+
+  auto It = m_DeviceKernelInfoMap.find(KernelName);
+  if (It == m_DeviceKernelInfoMap.end() || It->second.empty())
+    throw exception(make_error_code(errc::runtime),
+                    "No kernel found with the specified name");
+
+  void *CallerModule =
+      CallerAnchor ? getOSModuleHandle(CallerAnchor) : nullptr;
+  if (CallerModule) {
+    for (auto &Entry : It->second) {
+      if (Entry->getModuleHandle() == CallerModule)
+        return Entry->getKernelID();
+    }
+  }
+
+  return It->second.front()->getKernelID();
+}
+
 DeviceKernelInfo *
 ProgramManager::tryGetDeviceKernelInfo(std::string_view KernelName) {
   std::lock_guard<std::mutex> Guard(m_DeviceKernelInfoMapMutex);
