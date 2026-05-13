@@ -34,7 +34,12 @@ getDeviceKernelInfo(const CompileTimeKernelInfoTy &);
 __SYCL_EXPORT DeviceKernelInfo &
 getDeviceKernelInfo(const CompileTimeKernelInfoTy &, const void *CallerAnchor);
 
+<<<<<<< HEAD
 template <class Kernel> DeviceKernelInfo &getDeviceKernelInfo() {
+=======
+template <class Kernel>
+__SYCL_DLL_LOCAL DeviceKernelInfo &getDeviceKernelInfo() {
+>>>>>>> be74b10d4964 ([SYCL] Add DLL_LOCAL visibility to prevent template interposition (RTLD_GLOBAL))
   static char Anchor;
   static DeviceKernelInfo &Info =
       getDeviceKernelInfo(CompileTimeKernelInfo<Kernel>, &Anchor);

@@ -362,7 +362,12 @@ private:
                             "a single kernel or explicit memory operation.");
   }
 
+<<<<<<< HEAD
   template <class Kernel> void setDeviceKernelInfo(void *KernelFuncPtr) {
+=======
+  template <class Kernel>
+  __SYCL_DLL_LOCAL void setDeviceKernelInfo(void *KernelFuncPtr) {
+>>>>>>> be74b10d4964 ([SYCL] Add DLL_LOCAL visibility to prevent template interposition (RTLD_GLOBAL))
     constexpr auto Info = detail::CompileTimeKernelInfo<Kernel>;
     MKernelName = Info.Name;
     setKernelFunc(KernelFuncPtr);
