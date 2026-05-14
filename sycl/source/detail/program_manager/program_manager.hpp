@@ -229,7 +229,7 @@ public:
   tryGetSYCLKernelID(std::string_view KernelName) const {
     std::lock_guard<std::mutex> Guard(m_DeviceKernelInfoMapMutex);
 
-    auto It = m_DeviceKernelInfoMap.find(KernelName);
+    auto It = m_DeviceKernelInfoMap.find(std::string(KernelName));
     if (It == m_DeviceKernelInfoMap.end() || It->second.empty())
       return std::nullopt;
 
@@ -526,7 +526,7 @@ protected:
   // Multiple entries per kernel name are possible when different compilation
   // units (shared libraries) define kernels with the same name but different
   // argument layouts.
-  std::unordered_map<std::string_view,
+  std::unordered_map<std::string,
                      std::vector<std::unique_ptr<DeviceKernelInfo>>>
       m_DeviceKernelInfoMap;
 

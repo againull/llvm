@@ -1419,7 +1419,7 @@ ProgramManager::getDeviceImage(std::string_view KernelName,
   std::optional<kernel_id> FoundKernelID;
   {
     std::lock_guard<std::mutex> Guard(m_DeviceKernelInfoMapMutex);
-    if (auto It = m_DeviceKernelInfoMap.find(KernelName);
+    if (auto It = m_DeviceKernelInfoMap.find(std::string(KernelName));
         It != m_DeviceKernelInfoMap.end() && !It->second.empty()) {
       FoundKernelID = It->second.front()->getKernelID();
       // Try all entries for this kernel name (there may be multiple from
@@ -1642,7 +1642,7 @@ DeviceKernelInfo &
 ProgramManager::getDeviceKernelInfo(const CompileTimeKernelInfoTy &Info,
                                     const void *CallerAnchor) {
   std::lock_guard<std::mutex> Guard(m_DeviceKernelInfoMapMutex);
-  auto It = m_DeviceKernelInfoMap.find(Info.Name);
+  auto It = m_DeviceKernelInfoMap.find(std::string(Info.Name));
   assert(It != m_DeviceKernelInfoMap.end() && !It->second.empty());
 
   // Narrow down by caller DSO: two DSOs may register kernels with identical
@@ -1680,7 +1680,7 @@ ProgramManager::getDeviceKernelInfo(const CompileTimeKernelInfoTy &Info,
 DeviceKernelInfo &
 ProgramManager::getDeviceKernelInfo(std::string_view KernelName) {
   std::lock_guard<std::mutex> Guard(m_DeviceKernelInfoMapMutex);
-  auto It = m_DeviceKernelInfoMap.find(KernelName);
+  auto It = m_DeviceKernelInfoMap.find(std::string(KernelName));
   assert(It != m_DeviceKernelInfoMap.end() && !It->second.empty());
   return *It->second.front();
 }
@@ -1690,7 +1690,7 @@ ProgramManager::getSYCLKernelID(std::string_view KernelName,
                                 const void *CallerAnchor) const {
   std::lock_guard<std::mutex> Guard(m_DeviceKernelInfoMapMutex);
 
-  auto It = m_DeviceKernelInfoMap.find(KernelName);
+  auto It = m_DeviceKernelInfoMap.find(std::string(KernelName));
   if (It == m_DeviceKernelInfoMap.end() || It->second.empty())
     throw exception(make_error_code(errc::runtime),
                     "No kernel found with the specified name");
@@ -1710,7 +1710,7 @@ ProgramManager::getSYCLKernelID(std::string_view KernelName,
 DeviceKernelInfo *
 ProgramManager::tryGetDeviceKernelInfo(std::string_view KernelName) {
   std::lock_guard<std::mutex> Guard(m_DeviceKernelInfoMapMutex);
-  auto It = m_DeviceKernelInfoMap.find(KernelName);
+  auto It = m_DeviceKernelInfoMap.find(std::string(KernelName));
   if (It == m_DeviceKernelInfoMap.end() || It->second.empty())
     return nullptr;
   return It->second.front().get();
@@ -1906,7 +1906,7 @@ void ProgramManager::addImage(sycl_device_binary RawImg,
     if (m_ExportedSymbolImages.find(name) != m_ExportedSymbolImages.end())
       continue;
 
-    auto &Entries = m_DeviceKernelInfoMap[std::string_view(name)];
+    auto &Entries = m_DeviceKernelInfoMap[name];
 
     // Look for an existing entry from the same registration group
     // (same sycl_device_binaries / same .so). This handles the SPIRV+AOT case
@@ -2059,7 +2059,7 @@ void ProgramManager::removeImages(sycl_device_binaries DeviceBinary) {
         continue;
       }
 
-      auto DKIIt = m_DeviceKernelInfoMap.find(Name);
+      auto DKIIt = m_DeviceKernelInfoMap.find(std::string(Name));
       assert(DKIIt != m_DeviceKernelInfoMap.end() && !DKIIt->second.empty());
 
       // Find the specific entry whose kernel_id maps to this image.
