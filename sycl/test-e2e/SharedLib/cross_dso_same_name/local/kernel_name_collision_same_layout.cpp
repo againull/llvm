@@ -1,0 +1,125 @@
+// Test that two shared libraries defining SYCL kernels with the same class
+// name AND identical argument layouts but different bodies work correctly
+// when loaded into the same process. This exercises ProgramManager's
+// per-DSO disambiguation of otherwise-indistinguishable kernel entries.
+//
+// REQUIRES: linux
+//
+// RUN: rm -rf %t.dir && mkdir -p %t.dir
+// RUN: %{build} -DBUILD_LIB_ADD -fPIC -shared -o %t.dir/lib_add.so
+// RUN: %{build} -DBUILD_LIB_MUL -fPIC -shared -o %t.dir/lib_mul.so
+// RUN: %{build} -DBUILD_MAIN -DLIB_DIR=%t.dir -ldl -o %t.out
+// RUN: %{run} %t.out
+
+#include <sycl/detail/core.hpp>
+#include <sycl/usm.hpp>
+
+#include <cassert>
+#include <cstdio>
+
+class KernelFunctor;
+
+#ifdef BUILD_LIB_ADD
+// Same name (KernelFunctor), same captures (two float* pointers), body adds 1.
+extern "C" __attribute__((visibility("default"))) int
+run_add(sycl::queue *q) {
+  constexpr int N = 64;
+  float *out = sycl::malloc_device<float>(N, *q);
+  float *in = sycl::malloc_device<float>(N, *q);
+  q->fill(in, 1.0f, N).wait();
+  q->memset(out, 0, N * sizeof(float)).wait();
+
+  q->submit([&](sycl::handler &cgh) {
+     cgh.parallel_for<KernelFunctor>(sycl::range<1>(N), [=](sycl::id<1> i) {
+       out[i] = in[i] + 1.0f;
+     });
+   }).wait();
+
+  std::vector<float> result(N);
+  q->memcpy(result.data(), out, N * sizeof(float)).wait();
+  sycl::free(out, *q);
+  sycl::free(in, *q);
+
+  for (int i = 0; i < N; ++i) {
+    if (result[i] != 2.0f)
+      return -1;
+  }
+  return 0;
+}
+#endif
+
+#ifdef BUILD_LIB_MUL
+// Same name, same captures, body multiplies by 3.
+extern "C" __attribute__((visibility("default"))) int
+run_mul(sycl::queue *q) {
+  constexpr int N = 64;
+  float *out = sycl::malloc_device<float>(N, *q);
+  float *in = sycl::malloc_device<float>(N, *q);
+  q->fill(in, 1.0f, N).wait();
+  q->memset(out, 0, N * sizeof(float)).wait();
+
+  q->submit([&](sycl::handler &cgh) {
+     cgh.parallel_for<KernelFunctor>(sycl::range<1>(N), [=](sycl::id<1> i) {
+       out[i] = in[i] * 3.0f;
+     });
+   }).wait();
+
+  std::vector<float> result(N);
+  q->memcpy(result.data(), out, N * sizeof(float)).wait();
+  sycl::free(out, *q);
+  sycl::free(in, *q);
+
+  for (int i = 0; i < N; ++i) {
+    if (result[i] != 3.0f)
+      return -1;
+  }
+  return 0;
+}
+#endif
+
+#ifdef BUILD_MAIN
+#include <dlfcn.h>
+
+#define STRINGIFY_HELPER(A) #A
+#define STRINGIFY(A) STRINGIFY_HELPER(A)
+
+using fn_t = int (*)(sycl::queue *);
+
+int main() {
+  sycl::queue q;
+
+  void *h_add =
+      dlopen(STRINGIFY(LIB_DIR) "/lib_add.so", RTLD_NOW | RTLD_LOCAL);
+  if (!h_add) {
+    std::fprintf(stderr, "Failed to load lib_add.so: %s\n", dlerror());
+    return 1;
+  }
+  void *h_mul =
+      dlopen(STRINGIFY(LIB_DIR) "/lib_mul.so", RTLD_NOW | RTLD_LOCAL);
+  if (!h_mul) {
+    std::fprintf(stderr, "Failed to load lib_mul.so: %s\n", dlerror());
+    return 1;
+  }
+
+  auto *fn_add = (fn_t)dlsym(h_add, "run_add");
+  auto *fn_mul = (fn_t)dlsym(h_mul, "run_mul");
+  if (!fn_add || !fn_mul) {
+    std::fprintf(stderr, "Failed to find symbols\n");
+    return 1;
+  }
+
+  int rc_add = fn_add(&q);
+  int rc_mul = fn_mul(&q);
+
+  std::printf("add kernel (expect 2.0): %s\n", rc_add == 0 ? "PASS" : "FAIL");
+  std::printf("mul kernel (expect 3.0): %s\n", rc_mul == 0 ? "PASS" : "FAIL");
+
+  assert(rc_add == 0 && "add kernel produced wrong results");
+  assert(rc_mul == 0 && "mul kernel produced wrong results");
+
+  dlclose(h_add);
+  dlclose(h_mul);
+
+  return 0;
+}
+#endif
