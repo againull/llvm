@@ -12,6 +12,7 @@
 // RUN: %{run} %t.out
 
 #include <sycl/detail/core.hpp>
+#include <sycl/usm.hpp>
 
 #include <cassert>
 #include <cstdio>
@@ -94,12 +95,12 @@ using fn_t = int (*)(sycl::queue *);
 int main() {
   sycl::queue q;
 
-  void *hs = dlopen(STRINGIFY(LIB_DIR) "/small.so", RTLD_NOW | RTLD_GLOBAL);
+  void *hs = dlopen(STRINGIFY(LIB_DIR) "/small.so", RTLD_NOW | RTLD_LOCAL);
   if (!hs) {
     std::fprintf(stderr, "Failed to load small.so: %s\n", dlerror());
     return 1;
   }
-  void *hl = dlopen(STRINGIFY(LIB_DIR) "/large.so", RTLD_NOW | RTLD_GLOBAL);
+  void *hl = dlopen(STRINGIFY(LIB_DIR) "/large.so", RTLD_NOW | RTLD_LOCAL);
   if (!hl) {
     std::fprintf(stderr, "Failed to load large.so: %s\n", dlerror());
     return 1;
