@@ -34,11 +34,6 @@ getDeviceKernelInfo(const CompileTimeKernelInfoTy &);
 __SYCL_EXPORT DeviceKernelInfo &
 getDeviceKernelInfo(const CompileTimeKernelInfoTy &, const void *CallerAnchor);
 
-__SYCL_EXPORT DeviceKernelInfo &
-getDeviceKernelInfo(std::string_view KernelName);
-__SYCL_EXPORT DeviceKernelInfo &
-getDeviceKernelInfo(std::string_view KernelName, const void *CallerAnchor);
-
 template <class Kernel> DeviceKernelInfo &getDeviceKernelInfo() {
   static char Anchor;
   static DeviceKernelInfo &Info =
@@ -46,21 +41,12 @@ template <class Kernel> DeviceKernelInfo &getDeviceKernelInfo() {
   return Info;
 }
 
-// Overload that uses an additional UniqueType (typically the kernel lambda type)
-// for DSO anchoring. When a user provides an explicit kernel name that is
-// shared across DSOs, the primary template above may be interposed by the
-// dynamic linker (RTLD_GLOBAL), causing all DSOs to share one Anchor. By
-// parameterizing on the lambda type — which is unique per translation unit —
-// each DSO gets its own instantiation and thus its own Anchor address.
-//
-// CompileTimeKernelInfo and getKernelParamDesc are __SYCL_DLL_LOCAL, so the
-// Info passed here is always the correct per-DSO copy.
-template <class UniqueType>
-DeviceKernelInfo &getDeviceKernelInfo(const CompileTimeKernelInfoTy &Info) {
-  static char Anchor;
-  static DeviceKernelInfo &Cached = getDeviceKernelInfo(Info, &Anchor);
-  return Cached;
-}
+// Overload for free function kernels
+// Uses FreeFunctionInfoData which is specialized by the integration header
+__SYCL_EXPORT DeviceKernelInfo &
+getDeviceKernelInfo(std::string_view KernelName);
+__SYCL_EXPORT DeviceKernelInfo &
+getDeviceKernelInfo(std::string_view KernelName, const void *CallerAnchor);
 
 template <auto *Func> DeviceKernelInfo &getDeviceKernelInfo() {
   static char Anchor;

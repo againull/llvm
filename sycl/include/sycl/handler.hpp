@@ -370,15 +370,6 @@ private:
     setType(detail::CGType::Kernel);
   }
 
-  template <class UniqueType>
-  void setDeviceKernelInfo(const detail::CompileTimeKernelInfoTy &Info,
-                           void *KernelFuncPtr) {
-    MKernelName = Info.Name;
-    setKernelFunc(KernelFuncPtr);
-    setDeviceKernelInfoPtr(&detail::getDeviceKernelInfo<UniqueType>(Info));
-    setType(detail::CGType::Kernel);
-  }
-
   void setDeviceKernelInfo(kernel &&Kernel);
 
   /// Extracts and prepares kernel arguments set via set_arg(s).
@@ -688,10 +679,7 @@ private:
         "-fsycl-host-compiler-options='/std:c++latest' "
         "might also help.");
 
-    if constexpr (std::is_same_v<KernelName, KernelType>)
-      setDeviceKernelInfo<KernelName>((void *)MHostKernel->getPtr());
-    else
-      setDeviceKernelInfo<KernelType>(Info, (void *)MHostKernel->getPtr());
+    setDeviceKernelInfo<KernelName>((void *)MHostKernel->getPtr());
 
     // If the kernel lambda is callable with a kernel_handler argument, manifest
     // the associated kernel handler.
