@@ -1,8 +1,9 @@
 // Shared test body for kernel_name_collision_same_layout tests.
 // Included by variant-specific .cpp files that define:
-//   DLOPEN_FLAGS - dlopen flags (e.g. RTLD_NOW | RTLD_LOCAL)
+//   DLOPEN_FLAGS - dlopen flags (e.g. RTLD_NOW | RTLD_LOCAL) [Linux only]
 //   KERNEL_CLASS_DECL - how the kernel class is declared (may include
 //   namespace)
+//   LIB_ADD, LIB_MUL - library file names (e.g. "lib_add.so" or "lib_add.dll")
 //
 // This test verifies that two shared libraries defining SYCL kernels with the
 // same class name AND identical argument layouts but different bodies work
@@ -14,11 +15,17 @@
 #include <cassert>
 #include <cstdio>
 
+#ifdef _WIN32
+#define EXPORT_FN extern "C" __declspec(dllexport)
+#else
+#define EXPORT_FN extern "C" __attribute__((visibility("default")))
+#endif
+
 KERNEL_CLASS_DECL
 
 #ifdef BUILD_LIB_ADD
 // Same name (KernelFunctor), same captures (two float* pointers), body adds 1.
-extern "C" __attribute__((visibility("default"))) int run_add(sycl::queue *q) {
+EXPORT_FN int run_add(sycl::queue *q) {
   constexpr int N = 64;
   float *out = sycl::malloc_device<float>(N, *q);
   float *in = sycl::malloc_device<float>(N, *q);
@@ -45,7 +52,7 @@ extern "C" __attribute__((visibility("default"))) int run_add(sycl::queue *q) {
 
 #ifdef BUILD_LIB_MUL
 // Same name, same captures, body multiplies by 3.
-extern "C" __attribute__((visibility("default"))) int run_mul(sycl::queue *q) {
+EXPORT_FN int run_mul(sycl::queue *q) {
   constexpr int N = 64;
   float *out = sycl::malloc_device<float>(N, *q);
   float *in = sycl::malloc_device<float>(N, *q);
@@ -71,7 +78,7 @@ extern "C" __attribute__((visibility("default"))) int run_mul(sycl::queue *q) {
 #endif
 
 #ifdef BUILD_MAIN
-#include <dlfcn.h>
+#include "dynlib.inc"
 
 #define STRINGIFY_HELPER(A) #A
 #define STRINGIFY(A) STRINGIFY_HELPER(A)
@@ -81,19 +88,15 @@ using fn_t = int (*)(sycl::queue *);
 int main() {
   sycl::queue q;
 
-  void *h_add = dlopen(STRINGIFY(LIB_DIR) "/lib_add.so", DLOPEN_FLAGS);
-  if (!h_add) {
-    std::fprintf(stderr, "Failed to load lib_add.so: %s\n", dlerror());
+  auto h_add = loadLib(STRINGIFY(LIB_DIR) "/" LIB_ADD);
+  if (!h_add)
     return 1;
-  }
-  void *h_mul = dlopen(STRINGIFY(LIB_DIR) "/lib_mul.so", DLOPEN_FLAGS);
-  if (!h_mul) {
-    std::fprintf(stderr, "Failed to load lib_mul.so: %s\n", dlerror());
+  auto h_mul = loadLib(STRINGIFY(LIB_DIR) "/" LIB_MUL);
+  if (!h_mul)
     return 1;
-  }
 
-  auto *fn_add = (fn_t)dlsym(h_add, "run_add");
-  auto *fn_mul = (fn_t)dlsym(h_mul, "run_mul");
+  auto *fn_add = (fn_t)getSymbol(h_add, "run_add");
+  auto *fn_mul = (fn_t)getSymbol(h_mul, "run_mul");
   if (!fn_add || !fn_mul) {
     std::fprintf(stderr, "Failed to find symbols\n");
     return 1;
@@ -108,8 +111,8 @@ int main() {
   assert(rc_add == 0 && "add kernel produced wrong results");
   assert(rc_mul == 0 && "mul kernel produced wrong results");
 
-  dlclose(h_add);
-  dlclose(h_mul);
+  unloadLib(h_add);
+  unloadLib(h_mul);
 
   return 0;
 }

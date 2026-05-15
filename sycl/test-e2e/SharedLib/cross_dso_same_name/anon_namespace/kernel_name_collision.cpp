@@ -11,4 +11,6 @@
   namespace {                                                                  \
   class KernelFunctor;                                                         \
   }
+#define LIB_SMALL "small.so"
+#define LIB_LARGE "large.so"
 #include "../kernel_name_collision.inc"

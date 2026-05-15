@@ -11,4 +11,6 @@
   namespace {                                                                  \
   class KernelFunctor;                                                         \
   }
+#define LIB_A "lib_a.so"
+#define LIB_B "lib_b.so"
 #include "../kernel_name_collision_kernel_bundle.inc"

@@ -8,4 +8,6 @@
 
 #define DLOPEN_FLAGS (RTLD_NOW | RTLD_GLOBAL)
 #define KERNEL_CLASS_DECL class KernelFunctor;
+#define LIB_ADD "lib_add.so"
+#define LIB_MUL "lib_mul.so"
 #include "../kernel_name_collision_same_layout.inc"

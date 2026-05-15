@@ -1,8 +1,9 @@
 // Shared test body for kernel_name_collision tests.
 // Included by variant-specific .cpp files that define:
-//   DLOPEN_FLAGS - dlopen flags (e.g. RTLD_NOW | RTLD_LOCAL)
+//   DLOPEN_FLAGS - dlopen flags (e.g. RTLD_NOW | RTLD_LOCAL) [Linux only]
 //   KERNEL_CLASS_DECL - how the kernel class is declared (may include
 //   namespace)
+//   LIB_SMALL, LIB_LARGE - library file names (e.g. "small.so" or "small.dll")
 //
 // This test verifies that two shared libraries defining SYCL kernels with the
 // same class name but different argument layouts work correctly when loaded
@@ -14,11 +15,16 @@
 #include <cassert>
 #include <cstdio>
 
+#ifdef _WIN32
+#define EXPORT_FN extern "C" __declspec(dllexport)
+#else
+#define EXPORT_FN extern "C" __attribute__((visibility("default")))
+#endif
+
 KERNEL_CLASS_DECL
 
 #ifdef BUILD_SMALL_LIB
-extern "C"
-    __attribute__((visibility("default"))) int run_small(sycl::queue *q) {
+EXPORT_FN int run_small(sycl::queue *q) {
   constexpr int N = 64;
   float *out = sycl::malloc_device<float>(N, *q);
   float *in = sycl::malloc_device<float>(N, *q);
@@ -45,8 +51,7 @@ extern "C"
 #endif
 
 #ifdef BUILD_LARGE_LIB
-extern "C"
-    __attribute__((visibility("default"))) int run_large(sycl::queue *q) {
+EXPORT_FN int run_large(sycl::queue *q) {
   constexpr int N = 64;
   float *p0 = sycl::malloc_device<float>(N, *q);
   float *p1 = sycl::malloc_device<float>(N, *q);
@@ -81,7 +86,7 @@ extern "C"
 #endif
 
 #ifdef BUILD_MAIN
-#include <dlfcn.h>
+#include "dynlib.inc"
 
 #define STRINGIFY_HELPER(A) #A
 #define STRINGIFY(A) STRINGIFY_HELPER(A)
@@ -91,19 +96,15 @@ using fn_t = int (*)(sycl::queue *);
 int main() {
   sycl::queue q;
 
-  void *hs = dlopen(STRINGIFY(LIB_DIR) "/small.so", DLOPEN_FLAGS);
-  if (!hs) {
-    std::fprintf(stderr, "Failed to load small.so: %s\n", dlerror());
+  auto hs = loadLib(STRINGIFY(LIB_DIR) "/" LIB_SMALL);
+  if (!hs)
     return 1;
-  }
-  void *hl = dlopen(STRINGIFY(LIB_DIR) "/large.so", DLOPEN_FLAGS);
-  if (!hl) {
-    std::fprintf(stderr, "Failed to load large.so: %s\n", dlerror());
+  auto hl = loadLib(STRINGIFY(LIB_DIR) "/" LIB_LARGE);
+  if (!hl)
     return 1;
-  }
 
-  auto *fn_small = (fn_t)dlsym(hs, "run_small");
-  auto *fn_large = (fn_t)dlsym(hl, "run_large");
+  auto *fn_small = (fn_t)getSymbol(hs, "run_small");
+  auto *fn_large = (fn_t)getSymbol(hl, "run_large");
 
   if (!fn_small || !fn_large) {
     std::fprintf(stderr, "Failed to find symbols\n");
@@ -119,8 +120,8 @@ int main() {
   assert(rc_small == 0 && "Small kernel failed when both libs are loaded");
   assert(rc_large == 0 && "Large kernel failed when both libs are loaded");
 
-  dlclose(hs);
-  dlclose(hl);
+  unloadLib(hs);
+  unloadLib(hl);
 
   return 0;
 }

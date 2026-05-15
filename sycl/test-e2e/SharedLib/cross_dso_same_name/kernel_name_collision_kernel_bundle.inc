@@ -1,8 +1,9 @@
 // Shared test body for kernel_name_collision_kernel_bundle tests.
 // Included by variant-specific .cpp files that define:
-//   DLOPEN_FLAGS - dlopen flags (e.g. RTLD_NOW | RTLD_LOCAL)
+//   DLOPEN_FLAGS - dlopen flags (e.g. RTLD_NOW | RTLD_LOCAL) [Linux only]
 //   KERNEL_CLASS_DECL - how the kernel class is declared (may include
 //   namespace)
+//   LIB_A, LIB_B - library file names (e.g. "lib_a.so" or "lib_a.dll")
 //
 // This test verifies that invoking a kernel via kernel_bundle from within each
 // DSO (and main) runs that DSO's own version of the kernel. Three compilation
@@ -17,12 +18,17 @@
 #include <cstdio>
 #include <vector>
 
+#ifdef _WIN32
+#define EXPORT_FN extern "C" __declspec(dllexport)
+#else
+#define EXPORT_FN extern "C" __attribute__((visibility("default")))
+#endif
+
 KERNEL_CLASS_DECL
 
 #ifdef BUILD_LIB_A
 // KernelFunctor in lib_a: out[i] = in[i] + 10
-extern "C" __attribute__((visibility("default"))) int
-run_via_bundle_a(sycl::queue *q) {
+EXPORT_FN int run_via_bundle_a(sycl::queue *q) {
   constexpr int N = 64;
   float *out = sycl::malloc_device<float>(N, *q);
   float *in = sycl::malloc_device<float>(N, *q);
@@ -57,8 +63,7 @@ run_via_bundle_a(sycl::queue *q) {
 
 #ifdef BUILD_LIB_B
 // KernelFunctor in lib_b: out[i] = in[i] + 20
-extern "C" __attribute__((visibility("default"))) int
-run_via_bundle_b(sycl::queue *q) {
+EXPORT_FN int run_via_bundle_b(sycl::queue *q) {
   constexpr int N = 64;
   float *out = sycl::malloc_device<float>(N, *q);
   float *in = sycl::malloc_device<float>(N, *q);
@@ -92,7 +97,7 @@ run_via_bundle_b(sycl::queue *q) {
 #endif
 
 #ifdef BUILD_MAIN
-#include <dlfcn.h>
+#include "dynlib.inc"
 
 #define STRINGIFY_HELPER(A) #A
 #define STRINGIFY(A) STRINGIFY_HELPER(A)
@@ -136,19 +141,15 @@ int run_via_bundle_main(sycl::queue *q) {
 int main() {
   sycl::queue q;
 
-  void *h_a = dlopen(STRINGIFY(LIB_DIR) "/lib_a.so", DLOPEN_FLAGS);
-  if (!h_a) {
-    std::fprintf(stderr, "Failed to load lib_a.so: %s\n", dlerror());
+  auto h_a = loadLib(STRINGIFY(LIB_DIR) "/" LIB_A);
+  if (!h_a)
     return 1;
-  }
-  void *h_b = dlopen(STRINGIFY(LIB_DIR) "/lib_b.so", DLOPEN_FLAGS);
-  if (!h_b) {
-    std::fprintf(stderr, "Failed to load lib_b.so: %s\n", dlerror());
+  auto h_b = loadLib(STRINGIFY(LIB_DIR) "/" LIB_B);
+  if (!h_b)
     return 1;
-  }
 
-  auto *fn_a = (fn_t)dlsym(h_a, "run_via_bundle_a");
-  auto *fn_b = (fn_t)dlsym(h_b, "run_via_bundle_b");
+  auto *fn_a = (fn_t)getSymbol(h_a, "run_via_bundle_a");
+  auto *fn_b = (fn_t)getSymbol(h_b, "run_via_bundle_b");
   if (!fn_a || !fn_b) {
     std::fprintf(stderr, "Failed to find symbols\n");
     return 1;
@@ -169,8 +170,8 @@ int main() {
   assert(rc_b == 0 && "lib_b kernel_bundle invocation ran wrong kernel");
   assert(rc_main == 0 && "main kernel_bundle invocation ran wrong kernel");
 
-  dlclose(h_a);
-  dlclose(h_b);
+  unloadLib(h_a);
+  unloadLib(h_b);
 
   return 0;
 }

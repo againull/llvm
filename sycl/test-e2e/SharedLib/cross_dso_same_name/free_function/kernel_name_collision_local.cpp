@@ -7,4 +7,6 @@
 // RUN: %{run} %t.out
 
 #define DLOPEN_FLAGS (RTLD_NOW | RTLD_LOCAL)
+#define LIB_ADD "lib_add.so"
+#define LIB_MUL "lib_mul.so"
 #include "../kernel_name_collision_free_function.inc"
