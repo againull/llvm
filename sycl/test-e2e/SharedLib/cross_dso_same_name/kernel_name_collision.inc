@@ -87,19 +87,21 @@ EXPORT_FN int run_large(sycl::queue *q) {
 
 #ifdef BUILD_MAIN
 #include "dynlib.inc"
-
-#define STRINGIFY_HELPER(A) #A
-#define STRINGIFY(A) STRINGIFY_HELPER(A)
+#include <string>
 
 using fn_t = int (*)(sycl::queue *);
+
+static std::string makePath(const char *Lib) {
+  return std::string(LIB_DIR) + "/" + Lib;
+}
 
 int main() {
   sycl::queue q;
 
-  auto hs = loadLib(STRINGIFY(LIB_DIR) "/" LIB_SMALL);
+  auto hs = loadLib(makePath(LIB_SMALL).c_str());
   if (!hs)
     return 1;
-  auto hl = loadLib(STRINGIFY(LIB_DIR) "/" LIB_LARGE);
+  auto hl = loadLib(makePath(LIB_LARGE).c_str());
   if (!hl)
     return 1;
 

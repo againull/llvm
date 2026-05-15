@@ -79,19 +79,21 @@ EXPORT_FN int run_mul(sycl::queue *q) {
 
 #ifdef BUILD_MAIN
 #include "dynlib.inc"
-
-#define STRINGIFY_HELPER(A) #A
-#define STRINGIFY(A) STRINGIFY_HELPER(A)
+#include <string>
 
 using fn_t = int (*)(sycl::queue *);
+
+static std::string makePath(const char *Lib) {
+  return std::string(LIB_DIR) + "/" + Lib;
+}
 
 int main() {
   sycl::queue q;
 
-  auto h_add = loadLib(STRINGIFY(LIB_DIR) "/" LIB_ADD);
+  auto h_add = loadLib(makePath(LIB_ADD).c_str());
   if (!h_add)
     return 1;
-  auto h_mul = loadLib(STRINGIFY(LIB_DIR) "/" LIB_MUL);
+  auto h_mul = loadLib(makePath(LIB_MUL).c_str());
   if (!h_mul)
     return 1;
 
