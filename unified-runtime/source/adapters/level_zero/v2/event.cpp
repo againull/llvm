@@ -54,6 +54,15 @@ uint64_t event_profiling_data_t::getEventEndTimestamp() {
   assert(zeTimerResolution);
   assert(timestampMaxValue);
 
+  // For timestamp-recording events (submit_profiling_tag), recordStartTimestamp
+  // does not call urDeviceGetGlobalTimestamps, so adjustedEventStartTimestamp
+  // is 0. Populate it lazily here from the GPU-written end value so that the
+  // wrap-around detection in adjustEndEventTimestamp works correctly.
+  if (adjustedEventStartTimestamp == 0) {
+    adjustedEventStartTimestamp =
+        (recordEventEndTimestamp & timestampMaxValue) * zeTimerResolution;
+  }
+
   adjustedEventEndTimestamp = adjustEndEventTimestamp(
       adjustedEventStartTimestamp, recordEventEndTimestamp, timestampMaxValue,
       zeTimerResolution);
@@ -80,13 +89,16 @@ void event_profiling_data_t::reset() {
 void event_profiling_data_t::recordStartTimestamp(ur_device_handle_t hDevice) {
   zeTimerResolution = hDevice->getTimerResolution();
   timestampMaxValue = hDevice->getTimestampMask();
-
-  uint64_t deviceStartTimestamp = 0;
-  UR_CALL_THROWS(ur::level_zero::urDeviceGetGlobalTimestamps(
-      hDevice, &deviceStartTimestamp, nullptr));
-
+  // Do not call urDeviceGetGlobalTimestamps here. For timestamp-recording
+  // events (submit_profiling_tag / enqueue_signal_event), the GPU itself
+  // writes the end timestamp via zeCommandListAppendWriteGlobalTimestamp.
+  // That single GPU-written value serves as both the "start" (used for
+  // wrap-around detection in getEventEndTimestamp) and the "end" result.
+  // Avoiding the urDeviceGetGlobalTimestamps ioctl removes ~17 µs of
+  // host-side overhead per tag operation on BMG/Xe2 hardware.
+  // adjustedEventStartTimestamp is populated lazily in getEventEndTimestamp
+  // once the GPU-written value is available.
   assert(adjustedEventStartTimestamp == 0);
-  adjustedEventStartTimestamp = deviceStartTimestamp;
   timestampRecorded = true;
 }
 
@@ -341,16 +353,19 @@ ur_result_t urEventGetProfilingInfo(
   // For timestamped events we have the timestamps ready directly on the event
   // handle, so we short-circuit the return.
   if (isTimestampedEvent) {
-    uint64_t contextStartTime = hEvent->getEventStartTimestmap();
     switch (propName) {
     case UR_PROFILING_INFO_COMMAND_QUEUED:
     case UR_PROFILING_INFO_COMMAND_SUBMIT:
-      return returnValue(contextStartTime);
-    case UR_PROFILING_INFO_COMMAND_END:
     case UR_PROFILING_INFO_COMMAND_START:
-    case UR_PROFILING_INFO_COMMAND_COMPLETE: {
+    case UR_PROFILING_INFO_COMMAND_END:
+    case UR_PROFILING_INFO_COMMAND_COMPLETE:
+      // For timestamp-recording events (submit_profiling_tag /
+      // enqueue_signal_event) all timestamps reflect the single GPU-written
+      // global timestamp captured by zeCommandListAppendWriteGlobalTimestamp.
+      // submit/queued == start == end by definition for a zero-duration tag.
+      // This avoids a urDeviceGetGlobalTimestamps call per tag while still
+      // sharing the same time base as other GPU events on the same device.
       return returnValue(hEvent->getEventEndTimestamp());
-    }
     default:
       UR_LOG(ERR, "urEventGetProfilingInfo: not supported ParamName");
       return UR_RESULT_ERROR_INVALID_VALUE;

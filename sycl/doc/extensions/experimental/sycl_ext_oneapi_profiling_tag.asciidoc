@@ -145,36 +145,37 @@ the "tag" command.
 In either case, the event's status becomes
 `info::event_command_status::complete` when all commands submitted to the queue
 prior to the call to `submit_profiling_tag` have completed.
-The event's `info::event_profiling::command_submit` timestamp reflects the
-time at which `submit_profiling_tag` is called.
 The event's `info::event_profiling::command_end` timestamp reflects the time
-at which the event enters the "complete" state.
+at which the tag command completes on the device.
 The event's `info::event_profiling::command_start` timestamp reflects the time
-that the profiling tag command starts executing.
-This timestamp is between the `info::event_profiling::command_submit` and
-`info::event_profiling::command_end` timestamps.
+that the tag command starts executing on the device.
+Implementations are encouraged to set the `command_start` timestamp to the same
+value as the `command_end` timestamp.
+The event's `info::event_profiling::command_submit` timestamp reflects the time
+at which the tag command completes on the device.
+Implementations are encouraged to set the `command_submit` timestamp to the same
+value as the `command_end` timestamp.
+
+[_Note:_ The `command_submit` timestamp is defined to equal the GPU completion
+time (same as `command_end`), rather than the host-side call time.
+This avoids a costly host–device clock synchronization query per call, which
+would introduce tens of microseconds of overhead per tag on Xe2/BMG hardware.
+For the primary use case of `submit_profiling_tag` (measuring elapsed GPU time
+between two tags), the `command_submit` value is irrelevant; only `command_end`
+(or `command_start`) is used in the subtraction.
+All timestamps are guaranteed to share the same time base as device timestamps
+from commands submitted to the same queue.
+_{endnote}_]
 
 It is unspecified whether the event ever has the
 `info::event_command_status::running` status.
 Implementations are encouraged to transition the event directly from the
-"submitted" status to the "complete" status and are encouraged to set the
-"command_start" timestamp to the same value as the "command_end" timestamp.
+"submitted" status to the "complete" status.
 
 _Throws:_ A synchronous `exception` with the `errc::invalid` error code if
 the queue's device does not have the aspect `ext_oneapi_queue_profiling_tag`
 and the queue was not constructed with the `property::queue::enable_profiling`
 property.
-
-[_Note:_ In order to understand why the "command_start" and "command_end"
-timestamps are encouraged to be the same, think of the barrier as an empty
-kernel with an implicit set of dependencies on all previous commands in the
-same queue.
-This theoretical kernel starts executing when the dependencies are resolved.
-Since the kernel is empty, the end time is the same as the start time.
-The "command_start" and "command_end" timestamps are not required to be the
-same, though, in order to accommodate an implementation where the barrier is
-implemented by submitting an actual kernel, which has non-zero execution time.
-_{endnote}_]
 |====
 
 
