@@ -22,6 +22,10 @@ ur_event_handle_t event_pool::allocate() {
   std::unique_lock<ur_mutex> lock(mutex);
 
   if (freelist.empty()) {
+    reclaimPendingTimestamps();
+  }
+
+  if (freelist.empty()) {
     auto start = events.size();
     auto end = start + EVENTS_BURST;
     for (; start < end; ++start) {
@@ -55,12 +59,32 @@ void event_pool::free(ur_event_handle_t event) {
 
   std::unique_lock<ur_mutex> lock(mutex);
 
-  event->reset();
-  freelist.push_back(event);
-
   // The event is still in the pool, so we need to increment the refcount
   assert(event->RefCount.getCount() == 0);
   event->RefCount.retain();
+
+  // Resetting or reusing an event a pending command will still write a timestamp
+  // into is not allowed, so park it until that write has arrived.
+  if (event->timestampWritePending()) {
+    pendingTimestamp.push_back(event);
+    return;
+  }
+
+  event->reset();
+  freelist.push_back(event);
+}
+
+void event_pool::reclaimPendingTimestamps() {
+  auto stillPending = pendingTimestamp.begin();
+  for (auto event : pendingTimestamp) {
+    if (event->timestampWritePending()) {
+      *stillPending++ = event;
+      continue;
+    }
+    event->reset();
+    freelist.push_back(event);
+  }
+  pendingTimestamp.erase(stillPending, pendingTimestamp.end());
 }
 
 event_provider *event_pool::getProvider() const { return provider.get(); }

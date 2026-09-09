@@ -37,14 +37,33 @@ struct event_profiling_data_t {
 
   bool recordingStarted() const;
 
+  // True while a recording has been started but the command has not written the
+  // timestamp yet.
+  bool timestampWritePending() const;
+
   // clear the profiling data, allowing the event to be reused
   // for a new command
   void reset();
 
 private:
+  // Destination of the device's timestamp write, passed as the dstptr of
+  // zeCommandListAppendWriteGlobalTimestamp(). The spec requires dstptr to be
+  // 8-byte aligned but does not bound what else that write may touch, and bytes
+  // next to it were observed being clobbered, so the timestamp is given a
+  // reserved region of its own that no host-written member shares.
+  static constexpr size_t timestampReservedSize = 64;
+
+  struct alignas(timestampReservedSize) timestamp_t {
+    uint64_t value = 0;
+  };
+  static_assert(sizeof(timestamp_t) == timestampReservedSize,
+                "the timestamp must have its reserved storage to itself");
+
+  timestamp_t recordEventEndTimestamp;
+
+  // Host-written state, kept out of the region above.
   ze_event_handle_t hZeEvent;
 
-  uint64_t recordEventEndTimestamp = 0;
   uint64_t adjustedEventEndTimestamp = 0;
 
   // Timer resolution in nanoseconds (converted from cycles/sec)
@@ -103,6 +122,10 @@ public:
   // Tells if this event was created as a timestamp event, allowing profiling
   // info even if profiling is not enabled.
   bool isTimestamped() const;
+
+  // True while the device still owes this event a timestamp write. Such an event
+  // must not be reset or handed out for another command.
+  bool timestampWritePending() const;
 
   // Tells if this event comes from a pool that has profiling enabled.
   bool isProfilingEnabled() const;

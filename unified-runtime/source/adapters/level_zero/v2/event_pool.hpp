@@ -55,11 +55,19 @@ public:
   event_flags_t getFlags() const;
 
 private:
+  // Move events from pendingTimestamp to the freelist once their timestamp
+  // write has arrived. Must be called with mutex held.
+  void reclaimPendingTimestamps();
+
   ur_context_handle_t hContext;
   std::unique_ptr<event_provider> provider;
 
   std::deque<ur_event_handle_t_> events;
   std::vector<ur_event_handle_t> freelist;
+
+  // Events released while the device still owes them a timestamp write. Kept out
+  // of the freelist until the write arrives, see reclaimPendingTimestamps().
+  std::vector<ur_event_handle_t> pendingTimestamp;
 
   ur_mutex mutex;
 };

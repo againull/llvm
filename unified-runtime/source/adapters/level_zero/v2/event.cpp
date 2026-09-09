@@ -40,6 +40,15 @@ static uint64_t adjustEndEventTimestamp(uint64_t adjustedStartTimestamp,
   return adjustedTimestamp;
 }
 
+// The timestamp is written by the device, not by any code the compiler can see,
+// so it must be read through a volatile access. A plain load could be reused
+// from an earlier read, or folded to the zero that reset() stored, since no
+// visible store follows it. Volatile only forces the load to be issued; the
+// value becoming visible at all is up to the L0 memory model.
+static uint64_t loadTimestamp(const uint64_t &timestamp) {
+  return *static_cast<const volatile uint64_t *>(&timestamp);
+}
+
 uint64_t event_profiling_data_t::getEventEndTimestamp() {
   // If adjustedEventEndTimestamp on the event is non-zero it means it has
   // collected the result of the queue already. In that case it has been
@@ -57,30 +66,38 @@ uint64_t event_profiling_data_t::getEventEndTimestamp() {
   assert(timestampMaxValue);
 
   // A timestamp-recording event holds a single GPU-written global timestamp,
-  // so there is no separate start value to detect a wrap-around against.
+  // so there is no separate start value to detect a wrap-around against. The
+  // command signals the event once it has written the timestamp, so the value is
+  // expected to be there; a zero timestamp is still returned as "not available"
+  // rather than as a bogus one.
   adjustedEventEndTimestamp =
-      (recordEventEndTimestamp & timestampMaxValue) * zeTimerResolution;
+      (loadTimestamp(recordEventEndTimestamp.value) & timestampMaxValue) *
+      zeTimerResolution;
 
   return adjustedEventEndTimestamp;
 }
 
+bool event_profiling_data_t::timestampWritePending() const {
+  return timestampRecorded && loadTimestamp(recordEventEndTimestamp.value) == 0;
+}
+
 void event_profiling_data_t::reset() {
-  // This ensures that the event is consider as not timestamped.
-  // We can't touch the recordEventEndTimestamp
-  // as it may still be overwritten by the driver.
-  // In case event is resued and initTimestampRecording
-  // is called again, adjustedEventEndTimestamp will always be updated correctly
-  // to the new value as we wait for the event to be signaled.
-  // If the event is reused on another queue, this means that the original
-  // queue must have been destroyed (and the even pool released back to the
-  // context) and the timstamp is already wrriten, so there's no race-condition
-  // possible.
+  // Clearing the timestamp is only safe once the write has arrived;
+  // event_pool::free() keeps events aside until then.
+  assert(!timestampWritePending());
+
+  recordEventEndTimestamp.value = 0;
   adjustedEventEndTimestamp = 0;
   timestampRecorded = false;
 }
 
 void event_profiling_data_t::initTimestampRecording(
     ur_device_handle_t hDevice) {
+  // reset() must have cleared any previous recording, otherwise
+  // timestampWritePending() would see a stale value.
+  assert(!timestampRecorded);
+  assert(loadTimestamp(recordEventEndTimestamp.value) == 0);
+
   zeTimerResolution = hDevice->getTimerResolution();
   timestampMaxValue = hDevice->getTimestampMask();
   timestampRecorded = true;
@@ -91,6 +108,11 @@ void ur_event_handle_t_::initTimestampRecording() {
   assert(hQueue);
   assert(hDevice);
 
+  // The device writes into this event, so its recycling must be controlled by
+  // the pool - a detached event is destroyed on release, possibly while the
+  // write is still outstanding.
+  assert(event_pool);
+
   profilingData.initTimestampRecording(hDevice);
 }
 
@@ -99,7 +121,7 @@ bool event_profiling_data_t::recordingStarted() const {
 }
 
 uint64_t *event_profiling_data_t::eventEndTimestampAddr() {
-  return &recordEventEndTimestamp;
+  return &recordEventEndTimestamp.value;
 }
 
 ur_event_handle_t_::ur_event_handle_t_(
@@ -155,6 +177,7 @@ void ur_event_handle_t_::reset() {
   }
 
   batchGeneration = std::nullopt;
+  profilingData.reset();
 }
 
 ze_event_handle_t ur_event_handle_t_::getZeEvent() const {
@@ -188,6 +211,10 @@ ur_result_t ur_event_handle_t_::release() {
 
 bool ur_event_handle_t_::isTimestamped() const {
   return profilingData.recordingStarted();
+}
+
+bool ur_event_handle_t_::timestampWritePending() const {
+  return profilingData.timestampWritePending();
 }
 
 bool ur_event_handle_t_::isProfilingEnabled() const {
