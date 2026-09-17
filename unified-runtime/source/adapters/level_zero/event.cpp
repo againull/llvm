@@ -1559,6 +1559,50 @@ ur_result_t ur_ze_event_list_t::createAndRetainUrZeEventList(
         NextImmCmdList != CurQueue->LastUsedCommandList;
   }
 
+  // RAII helper that temporarily releases the CurQueue lock (held by the
+  // caller) and acquires a dependent event's queue lock, restoring the
+  // CurQueue lock when it goes out of scope. This preserves the queue lock
+  // ordering while guaranteeing that CurQueue->Mutex is re-locked on every
+  // exit path from the loop body below - including early returns and
+  // exceptions. The previous manual unlock()/lock() pair could leave
+  // CurQueue->Mutex unlocked on an early return, so the caller's lock guard
+  // would unlock it a second time, which is undefined behavior for a
+  // std::shared_mutex (Coverity CID 520793).
+  struct ScopedQueueLockSwap {
+    ur_queue_handle_t CurQueue;
+    std::optional<std::unique_lock<ur_shared_mutex>> OtherQueueLock;
+    bool Swapped = false;
+
+    ScopedQueueLockSwap(ur_queue_handle_t CurQueue,
+                        ur_queue_handle_t OtherQueue)
+        : CurQueue(CurQueue) {
+      if (OtherQueue && OtherQueue != CurQueue) {
+        CurQueue->Mutex.unlock();
+        try {
+          OtherQueueLock.emplace(OtherQueue->Mutex);
+        } catch (...) {
+          // The destructor won't run if this constructor throws, so re-lock
+          // CurQueue here to keep the caller's lock guard balanced.
+          CurQueue->Mutex.lock();
+          throw;
+        }
+        Swapped = true;
+      }
+    }
+
+    ~ScopedQueueLockSwap() {
+      if (Swapped) {
+        // Release the other queue's lock before re-acquiring CurQueue's to
+        // keep the same lock ordering used when the swap was taken.
+        OtherQueueLock.reset();
+        CurQueue->Mutex.lock();
+      }
+    }
+
+    ScopedQueueLockSwap(const ScopedQueueLockSwap &) = delete;
+    ScopedQueueLockSwap &operator=(const ScopedQueueLockSwap &) = delete;
+  };
+
   try {
     uint32_t TmpListLength = 0;
 
@@ -1608,22 +1652,20 @@ ur_result_t ur_ze_event_list_t::createAndRetainUrZeEventList(
         auto Queue = EventList[I]->UrQueue;
 
         auto CurQueueDevice = CurQueue->Device;
-        std::optional<std::unique_lock<ur_shared_mutex>> QueueLock =
-            std::nullopt;
         // The caller of createAndRetainUrZeEventList must already hold
         // a lock of the CurQueue. However, if the CurQueue is different
         // then the Event's Queue, we need to drop that lock and
         // acquire the Event's Queue lock. This is done to avoid a lock
         // ordering issue.
         // For the rest of this scope, CurQueue cannot be accessed.
+        // The lock swap is undone (CurQueue re-locked) when QueueLockSwap
+        // goes out of scope at the end of the loop iteration, on any early
+        // return, or if an exception is thrown.
         // TODO: This solution is very error-prone. This requires a refactor
         // to either have fine-granularity locks inside of the queues or
         // to move any operations on queues other than CurQueue out
         // of this scope.
-        if (Queue && Queue != CurQueue) {
-          CurQueue->Mutex.unlock();
-          QueueLock = std::unique_lock<ur_shared_mutex>(Queue->Mutex);
-        }
+        ScopedQueueLockSwap QueueLockSwap(CurQueue, Queue);
 
         if (Queue) {
           // If the event that is going to be waited is in an open batch
@@ -1727,10 +1769,6 @@ ur_result_t ur_ze_event_list_t::createAndRetainUrZeEventList(
           this->UrEventList[TmpListLength]->RefCount.retain();
         }
 
-        if (QueueLock.has_value()) {
-          QueueLock.reset();
-          CurQueue->Mutex.lock();
-        }
         TmpListLength += 1;
       }
     }

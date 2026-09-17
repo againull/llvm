@@ -1769,6 +1769,23 @@ ur_result_t CleanupEventListFromResetCmdList(
   return UR_RESULT_SUCCESS;
 }
 
+// RAII helper that temporarily releases a Queue Mutex that is held by the
+// caller for the duration of a blocking Level Zero synchronization, and
+// re-acquires it when going out of scope. Using RAII guarantees the Mutex is
+// re-locked on every exit path - including the early returns produced by the
+// ZE2UR_CALL error checks below. A manual unlock()/lock() pair could return
+// early with the Mutex unlocked, causing the caller's lock guard to unlock it
+// a second time, which is undefined behavior for a std::shared_mutex.
+namespace {
+struct ScopedMutexUnlock {
+  ur_shared_mutex &Mutex;
+  ScopedMutexUnlock(ur_shared_mutex &Mutex) : Mutex(Mutex) { Mutex.unlock(); }
+  ~ScopedMutexUnlock() { Mutex.lock(); }
+  ScopedMutexUnlock(const ScopedMutexUnlock &) = delete;
+  ScopedMutexUnlock &operator=(const ScopedMutexUnlock &) = delete;
+};
+} // namespace
+
 // Wait on all operations in flight on this Queue.
 // The caller is expected to hold a lock on the Queue.
 // For standard commandlists sync the L0 queues directly.
@@ -1789,9 +1806,8 @@ ur_result_t ur::level_zero::v1::ur_queue_handle_t_::synchronize() {
 
     // wait for all commands previously submitted to this immediate command list
     if (UrL0QueueSyncNonBlocking) {
-      Queue->Mutex.unlock();
+      ScopedMutexUnlock QueueUnlock(Queue->Mutex);
       ZE2UR_CALL(zeCommandListHostSynchronize, (ImmCmdList->first, UINT64_MAX));
-      Queue->Mutex.lock();
     } else {
       ZE2UR_CALL(zeCommandListHostSynchronize, (ImmCmdList->first, UINT64_MAX));
     }
@@ -1841,9 +1857,8 @@ ur_result_t ur::level_zero::v1::ur_queue_handle_t_::synchronize() {
             for (auto &ZeQueue : QueueGroup.second.ZeQueues)
               if (ZeQueue) {
                 if (UrL0QueueSyncNonBlocking) {
-                  this->Mutex.unlock();
+                  ScopedMutexUnlock QueueUnlock(this->Mutex);
                   ZE2UR_CALL(zeHostSynchronize, (ZeQueue));
-                  this->Mutex.lock();
                 } else {
                   ZE2UR_CALL(zeHostSynchronize, (ZeQueue));
                 }
