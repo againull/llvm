@@ -693,7 +693,7 @@ EventImplPtr queue_impl::submit_async_alloc_scheduler_bypass(
   // enqueued to the backend by the caller, because the pointer has to be
   // returned to the user immediately. Only the event of that enqueue has to be
   // wrapped into an event_impl here.
-  if (!EventNeeded && isInOrder()) {
+  if (!EventNeeded) {
     assert(!UREvent && "An event was requested for a discarded allocation.");
     return nullptr;
   }
@@ -732,31 +732,30 @@ queue_impl::submit_async_malloc_direct(ur_usm_pool_handle_t Pool, size_t Size,
     const bool SchedulerBypass =
         detail::Scheduler::areEventsSafeForSchedulerBypass(CGData.MEvents,
                                                            getContextImpl());
-    // Nothing would take ownership of the event of the allocation on an
-    // in-order queue, which does not need it for ordering either.
-    const bool DiscardEvent = SchedulerBypass && isInOrder();
 
     std::vector<ur_event_handle_t> RawEvents;
     if (CGData.MEvents.size() > 0)
       RawEvents = detail::Command::getUrEvents(CGData.MEvents, this, false);
 
-    ur_event_handle_t UREvent = nullptr;
+    // The queue shortcut does not return an event, so no backend event is
+    // requested, not even if the scheduler handles the submission: later
+    // commands are ordered after it through the SYCL event of the command.
     getAdapter()
         .call<sycl::errc::runtime, UrApiKind::urEnqueueUSMDeviceAllocExp>(
             getHandleRef(), Pool, Size, nullptr, RawEvents.size(),
-            RawEvents.data(), &Alloc, DiscardEvent ? nullptr : &UREvent);
+            RawEvents.data(), &Alloc, nullptr);
 
     if (!SchedulerBypass) {
-      // The command group is a no-op, it only carries the event of the
-      // allocation which has already been enqueued above.
+      // The command group is a no-op, the allocation has already been
+      // enqueued above.
       std::unique_ptr<detail::CG> CommandGroup(
-          new detail::CGAsyncAlloc(UREvent, std::move(CGData), CodeLoc));
+          new detail::CGAsyncAlloc(nullptr, std::move(CGData), CodeLoc));
       return {detail::Scheduler::getInstance().addCG(std::move(CommandGroup),
                                                      *this, true),
               /*SchedulerBypass*/ false};
     }
 
-    return {submit_async_alloc_scheduler_bypass(UREvent, CGData.MEvents,
+    return {submit_async_alloc_scheduler_bypass(nullptr, CGData.MEvents,
                                                 /*EventNeeded*/ false),
             /*SchedulerBypass*/ true};
   };
@@ -1219,12 +1218,14 @@ detail::EventImplPtr queue_impl::submit_direct(
   }
 
   // Barrier and un-enqueued commands synchronization for out or order queue.
-  // The event must also be stored for future wait calls.
+  // The event must also be stored for future wait calls. A scheduler bypass
+  // submission may return no event if it is not needed, see
+  // finalizeHandlerOutOfOrder.
   if (!inOrder) {
     if (Type == CGType::Barrier || Type == CGType::BarrierWaitlist) {
       Deps.LastBarrier = EventImpl;
       Deps.UnenqueuedCmdEvents.clear();
-    } else if (!EventImpl->isEnqueued()) {
+    } else if (EventImpl && !EventImpl->isEnqueued()) {
       Deps.UnenqueuedCmdEvents.push_back(EventImpl);
     }
     addEventUnlocked(EventImpl);

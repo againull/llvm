@@ -992,13 +992,16 @@ protected:
         (Type == CGType::CodeplayHostTask || (!Deps.LastBarrier->isEnqueued())))
       Handler.depends_on(Deps.LastBarrier);
 
+    // A submission which bypasses the scheduler may return no event if it is
+    // not needed. Such a command has already been enqueued to the backend, so
+    // a later barrier orders it natively and it does not have to be tracked.
     EventImplPtr EventRetImpl = parseEvent(Handler.finalize());
     if (Type == CGType::CodeplayHostTask)
       Deps.UnenqueuedCmdEvents.push_back(EventRetImpl);
     else if (Type == CGType::Barrier || Type == CGType::BarrierWaitlist) {
       Deps.LastBarrier = EventRetImpl;
       Deps.UnenqueuedCmdEvents.clear();
-    } else if (!EventRetImpl->isEnqueued()) {
+    } else if (EventRetImpl && !EventRetImpl->isEnqueued()) {
       Deps.UnenqueuedCmdEvents.push_back(EventRetImpl);
     }
 

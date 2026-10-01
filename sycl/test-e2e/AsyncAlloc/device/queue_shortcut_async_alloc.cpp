@@ -49,6 +49,9 @@ class InOrderPoolKernel;
 class HostTaskKernel;
 class OutOfOrderKernel;
 class HandlerKernel;
+class OutOfOrderHandlerKernel;
+class OutOfOrderHandlerPoolKernel;
+class OutOfOrderHandlerHostTaskKernel;
 
 int main() {
   bool Pass = true;
@@ -142,6 +145,69 @@ int main() {
     Q.wait_and_throw();
 
     Pass &= validate(Out, "handler");
+  }
+
+  {
+    // The handler overloads on an out-of-order queue, submitted without
+    // requesting an event, ordered with barriers.
+    sycl::queue Q;
+    syclexp::memory_pool Pool{Q.get_context(), Q.get_device(),
+                              sycl::usm::alloc::device};
+    std::vector<char> Out(Width, 0);
+    std::vector<char> PoolOut(Width, 0);
+
+    for (int I = 0; I < 4; ++I) {
+      void *Alloc = nullptr;
+      void *PoolAlloc = nullptr;
+      syclexp::submit(Q, [&](sycl::handler &CGH) {
+        Alloc = syclexp::async_malloc(CGH, sycl::usm::alloc::device, Width);
+      });
+      syclexp::submit(Q, [&](sycl::handler &CGH) {
+        PoolAlloc = syclexp::async_malloc_from_pool(CGH, Width, Pool);
+      });
+      Q.ext_oneapi_submit_barrier();
+      fillAndCopyBack<OutOfOrderHandlerKernel>(Q, Alloc, Out);
+      fillAndCopyBack<OutOfOrderHandlerPoolKernel>(Q, PoolAlloc, PoolOut);
+      Q.ext_oneapi_submit_barrier();
+      syclexp::submit(
+          Q, [&](sycl::handler &CGH) { syclexp::async_free(CGH, Alloc); });
+      syclexp::submit(
+          Q, [&](sycl::handler &CGH) { syclexp::async_free(CGH, PoolAlloc); });
+    }
+    Q.wait_and_throw();
+
+    Pass &= validate(Out, "out-of-order handler");
+    Pass &= validate(PoolOut, "out-of-order handler pool");
+  }
+
+  {
+    // The handler overload on an out-of-order queue, depending on a host task,
+    // which makes the submission go through the scheduler.
+    sycl::queue Q;
+    std::vector<char> Out(Width, 0);
+    bool HostTaskExecuted = false;
+
+    sycl::event HostTask = Q.submit([&](sycl::handler &CGH) {
+      CGH.host_task([&]() { HostTaskExecuted = true; });
+    });
+
+    void *Alloc = nullptr;
+    syclexp::submit(Q, [&](sycl::handler &CGH) {
+      CGH.depends_on(HostTask);
+      Alloc = syclexp::async_malloc(CGH, sycl::usm::alloc::device, Width);
+    });
+    Q.ext_oneapi_submit_barrier();
+    fillAndCopyBack<OutOfOrderHandlerHostTaskKernel>(Q, Alloc, Out);
+    Q.ext_oneapi_submit_barrier();
+    syclexp::submit(
+        Q, [&](sycl::handler &CGH) { syclexp::async_free(CGH, Alloc); });
+    Q.wait_and_throw();
+
+    if (!HostTaskExecuted) {
+      std::cerr << "out-of-order handler host task: not executed!" << std::endl;
+      Pass = false;
+    }
+    Pass &= validate(Out, "out-of-order handler host task");
   }
 
   if (!Pass) {
