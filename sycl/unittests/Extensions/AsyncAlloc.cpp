@@ -370,6 +370,46 @@ TEST_F(AsyncAllocTests, OutOfOrderHandlerOverloadBarrierAfterHostTask) {
   EXPECT_EQ(CounterFree, size_t{1});
 }
 
+// The handler overload on an in-order queue enqueues the allocation while the
+// command group function runs, before the implicit dependency on the previous
+// command is added. A previous host task must still order the commands
+// following the allocation, and queue::wait must wait for it.
+TEST_F(AsyncAllocTests, InOrderHandlerOverloadAfterHostTask) {
+  HostTaskExecuted = false;
+  mock::getCallbacks().set_replace_callback(
+      "urEnqueueUSMFreeExp", &redefined_urEnqueueUSMFreeExpAfterHostTask);
+
+  queue Q = makeQueue(/*InOrder=*/true);
+
+  std::mutex Mtx;
+  std::unique_lock<std::mutex> Lock{Mtx};
+  Q.submit([&](handler &CGH) {
+    CGH.host_task([&]() {
+      std::lock_guard<std::mutex> Guard{Mtx};
+      HostTaskExecuted = true;
+    });
+  });
+
+  void *Ptr = nullptr;
+  oneapiext::submit(Q, [&](handler &CGH) {
+    Ptr = oneapiext::async_malloc(CGH, usm::alloc::device, 1024);
+  });
+  // The allocation itself is enqueued right away.
+  EXPECT_EQ(CounterAlloc, size_t{1});
+
+  oneapiext::submit(Q, [&](handler &CGH) { oneapiext::async_free(CGH, Ptr); });
+  // The free must not have been enqueued to the backend yet, as it is ordered
+  // after the host task, which is still blocked.
+  EXPECT_EQ(CounterFree, size_t{0});
+
+  Lock.unlock();
+  Q.wait();
+
+  EXPECT_TRUE(HostTaskExecuted.load());
+  EXPECT_EQ(CounterFree, size_t{1});
+  EXPECT_EQ(CounterAllocWithEvent, size_t{0});
+}
+
 // A host task dependency cannot be expressed to the backend, so the
 // submission has to fall back to the scheduler. The allocation itself is still
 // enqueued eagerly, as the pointer has to be returned to the caller

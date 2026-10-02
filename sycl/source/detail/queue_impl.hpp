@@ -940,14 +940,23 @@ protected:
     auto &EventToBuildDeps = MGraph.expired() ? MDefaultGraphDeps.LastEventPtr
                                               : MExtGraphDeps.LastEventPtr;
 
-    // depends_on after an async alloc is explicitly disallowed. Async alloc
-    // handles in order queue dependencies preemptively, so we skip them.
-    // Note: This could be improved by moving the handling of dependencies
-    // to before calling the CGF.
-    if (EventToBuildDeps && Handler.getType() != CGType::AsyncAlloc) {
+    if (EventToBuildDeps) {
       // If we have last event, this means we are no longer in no-event mode.
       assert(!MNoLastEventMode);
-      Handler.depends_on(EventToBuildDeps);
+      if (Handler.getType() != CGType::AsyncAlloc) {
+        Handler.depends_on(EventToBuildDeps);
+      } else if (MGraph.expired()) {
+        // An asynchronous allocation is enqueued to the backend while the
+        // command group function runs, so depends_on is disallowed afterwards.
+        // The in-order backend queue orders the allocation after the commands
+        // it has received already, but the last event can belong to a command
+        // it has not received, e.g. a host task. Make it a dependency of the
+        // command group anyway, so that the commands submitted after the
+        // allocation stay ordered after it.
+        getSyclObjImpl(Handler)->CGData.MEvents.push_back(EventToBuildDeps);
+      }
+      // When recording to a graph, async_malloc itself adds the last in-order
+      // node as a dependency.
     }
 
     MEmpty = false;

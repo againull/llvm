@@ -8,10 +8,12 @@
 // Each scenario allocates, fills the allocation from a kernel, copies it back
 // and frees it.
 
+#include <chrono>
 #include <iostream>
 #include <sycl/detail/core.hpp>
 #include <sycl/properties/queue_properties.hpp>
 #include <sycl/usm.hpp>
+#include <thread>
 
 #include <sycl/ext/oneapi/experimental/async_alloc/async_alloc.hpp>
 #include <sycl/ext/oneapi/experimental/async_alloc/memory_pool.hpp>
@@ -49,6 +51,7 @@ class InOrderPoolKernel;
 class HostTaskKernel;
 class OutOfOrderKernel;
 class HandlerKernel;
+class InOrderHandlerHostTaskKernel;
 class OutOfOrderHandlerKernel;
 class OutOfOrderHandlerPoolKernel;
 class OutOfOrderHandlerHostTaskKernel;
@@ -145,6 +148,42 @@ int main() {
     Q.wait_and_throw();
 
     Pass &= validate(Out, "handler");
+  }
+
+  {
+    // The handler overload on an in-order queue after a host task: the
+    // allocation is enqueued while the command group function runs, but the
+    // commands submitted after it must still run after the host task.
+    sycl::queue Q{sycl::property::queue::in_order{}};
+    int *Value = sycl::malloc_host<int>(1, Q);
+    *Value = 0;
+    int Out = 0;
+
+    Q.submit([&](sycl::handler &CGH) {
+      CGH.host_task([=]() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        *Value = 42;
+      });
+    });
+    int *Alloc = nullptr;
+    syclexp::submit(Q, [&](sycl::handler &CGH) {
+      Alloc = static_cast<int *>(
+          syclexp::async_malloc(CGH, sycl::usm::alloc::device, sizeof(int)));
+    });
+    syclexp::submit(Q, [&](sycl::handler &CGH) {
+      CGH.single_task<InOrderHandlerHostTaskKernel>([=]() { *Alloc = *Value; });
+    });
+    Q.memcpy(&Out, Alloc, sizeof(int));
+    syclexp::submit(
+        Q, [&](sycl::handler &CGH) { syclexp::async_free(CGH, Alloc); });
+    Q.wait_and_throw();
+    sycl::free(Value, Q);
+
+    if (Out != 42) {
+      std::cerr << "in-order handler host task: result mismatch! Expected: 42"
+                << ", actual: " << Out << std::endl;
+      Pass = false;
+    }
   }
 
   {
