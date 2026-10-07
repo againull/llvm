@@ -39,6 +39,8 @@ sphinxcontrib-websupport==1.2.4
 sphinx-rtd-theme==1.0.0
 urllib3==2.5.0
 dataclasses-json==0.6.7
+lit
+FileCheck
 
 # Unified-runtime is formatted using black
 black==25.9.0
