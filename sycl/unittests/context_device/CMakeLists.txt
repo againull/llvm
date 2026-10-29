@@ -3,4 +3,5 @@ add_sycl_unittest(ContextDeviceTests OBJECT
   DeviceRefCounter.cpp
   HasExtensionWordBoundary.cpp
   KhrProperties.cpp
+  PlatformDiscovery.cpp
 )

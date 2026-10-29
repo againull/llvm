@@ -101,10 +101,27 @@ context_impl &platform_impl::khr_get_default_context() {
   return *It->second;
 }
 
-// Get the vector of platforms supported by a given UR adapter
-// replace uses of this with a helper in adapter object, the adapter
-// objects will own the ur adapter handles and they'll need to pass them to
-// urPlatformsGet - so urPlatformsGet will need to be wrapped with a helper
+static bool isBackendUnavailable(const sycl::exception &Exception) {
+  switch (static_cast<ur_result_t>(get_ur_error(Exception))) {
+  case UR_RESULT_ERROR_UNINITIALIZED:
+  case UR_RESULT_ERROR_UNSUPPORTED_FEATURE:
+  case UR_RESULT_ERROR_UNSUPPORTED_VERSION:
+    return true;
+  default:
+    return false;
+  }
+}
+
+static void reportUnavailableBackend(const adapter_impl &Adapter,
+                                     const sycl::exception &Exception) {
+  if (SYCLConfig<SYCL_RT_WARNING_LEVEL>::get() > 0)
+    std::cerr << "SYCL warning: Skipping unavailable "
+              << get_backend_name_no_vendor(Adapter.getBackend())
+              << " platform during device discovery: " << Exception.what()
+              << '\n';
+}
+
+// Get the vector of platforms supported by a given UR adapter.
 std::vector<platform> platform_impl::getAdapterPlatforms(adapter_impl &Adapter,
                                                          bool Supported) {
   std::vector<platform> Platforms;
@@ -118,7 +135,19 @@ std::vector<platform> platform_impl::getAdapterPlatforms(adapter_impl &Adapter,
   for (const auto &UrPlatform : UrPlatforms) {
     platform Platform = detail::createSyclObjFromImpl<platform>(
         getOrMakePlatformImpl(UrPlatform, Adapter));
-    bool HasAnyDevices = !Platform.get_devices(info::device_type::all).empty();
+    bool HasAnyDevices = false;
+    try {
+      HasAnyDevices = !Platform.get_devices(info::device_type::all).empty();
+    } catch (const sycl::exception &Exception) {
+      if (!isBackendUnavailable(Exception))
+        throw;
+      reportUnavailableBackend(Adapter, Exception);
+      // An unavailable platform contributes no devices to selector numbering,
+      // just like a platform that successfully reports an empty device list.
+      std::lock_guard<std::mutex> Guard(*Adapter.getAdapterMutex());
+      Adapter.adjustLastDeviceId(UrPlatform);
+      continue;
+    }
 
     if (!Supported) {
       if (!HasAnyDevices) {
@@ -147,7 +176,15 @@ std::vector<platform> platform_impl::get_platforms() {
 
   // Then check backend-specific adapters
   for (auto &Adapter : Adapters) {
-    const auto &AdapterPlatforms = getAdapterPlatforms(*Adapter);
+    std::vector<platform> AdapterPlatforms;
+    try {
+      AdapterPlatforms = getAdapterPlatforms(*Adapter);
+    } catch (const sycl::exception &Exception) {
+      if (!isBackendUnavailable(Exception))
+        throw;
+      reportUnavailableBackend(*Adapter, Exception);
+      continue;
+    }
     for (const auto &P : AdapterPlatforms) {
       PlatformsWithAdapter.push_back({P, Adapter});
     }
