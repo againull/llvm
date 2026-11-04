@@ -35,6 +35,8 @@ void test_host_task_dep() {
 
 void test_device_event_dep() {
   queue q;
+  if (!q.get_device().has(aspect::usm_shared_allocations))
+    return;
 
   std::latch start_execution{1};
   auto *p = sycl::malloc_shared<int>(1, q);
@@ -57,6 +59,8 @@ void test_device_event_dep() {
 
 void test_accessor_dep() {
   queue q;
+  if (!q.get_device().has(aspect::usm_shared_allocations))
+    return;
 
   std::latch start_execution{1};
   auto *p = sycl::malloc_shared<int>(1, q);

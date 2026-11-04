@@ -1,3 +1,4 @@
+// REQUIRES: aspect-usm_device_allocations, aspect-usm_host_allocations
 // RUN: %{build} -o %t.event_list.out
 // RUN: %if gpu %{ env SYCL_PI_LEVEL_ZERO_USE_MULTIPLE_COMMANDLIST_BARRIERS=1 %} %{run} %t.event_list.out
 // RUN: %{build} -DUSE_QUEUE_WIDE_BARRIER -o %t.queue_wide.out
