@@ -1,3 +1,4 @@
+// REQUIRES: aspect-usm_device_allocations, aspect-queue_profiling
 /*This test checks that source information where an exception occured is
  * reported*/
 

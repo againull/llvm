@@ -22,7 +22,7 @@ int main() {
   return 0;
 }
 
-// REQUIRES: target-spir
+// REQUIRES: target-spir, aspect-usm_shared_allocations
 // UNSUPPORTED: opencl && gpu
 // UNSUPPORTED-TRACKER: GSD-4287
 // UNSUPPORTED: windows

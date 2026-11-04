@@ -1,4 +1,4 @@
-// REQUIRES: aspect-ext_oneapi_bindless_images
+// REQUIRES: aspect-ext_oneapi_bindless_images, aspect-usm_device_allocations
 // XFAIL: hip
 // XFAIL-TRACKER: https://github.com/intel/llvm/issues/19957
 

@@ -13,7 +13,7 @@
 // RUN: %{run} %t.out
 //
 // The kernels request a sub-group size of 16.
-// REQUIRES: sg-16
+// REQUIRES: sg-16, aspect-usm_device_allocations
 // REQUIRES: aspect-ext_oneapi_fragment
 //
 // UNSUPPORTED: cpu

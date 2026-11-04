@@ -1,4 +1,4 @@
-// REQUIRES: aspect-usm_device_allocations
+// REQUIRES: aspect-usm_shared_allocations
 
 // Check to ensure that the SYCL runtime sets the
 // UR_KERNEL_EXEC_INFO_USM_INDIRECT_ACCESS property to true for SYCLBIN kernels.

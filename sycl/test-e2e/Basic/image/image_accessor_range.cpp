@@ -1,4 +1,4 @@
-// REQUIRES: aspect-ext_intel_legacy_image
+// REQUIRES: aspect-ext_intel_legacy_image, aspect-usm_host_allocations
 
 // UNSUPPORTED: target-nvidia
 // UNSUPPORTED-INTENDED: CUDA doesn't fully support SYCL 1.2.1 images. Bindless

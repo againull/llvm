@@ -1,4 +1,4 @@
-// REQUIRES: xptifw, opencl, cpu, linux
+// REQUIRES: xptifw, opencl, cpu, linux, aspect-usm_device_allocations
 // RUN: %build_collector
 // RUN: %{build} -o %t.out
 // RUN: env UR_ENABLE_LAYERS=UR_LAYER_TRACING env XPTI_TRACE_ENABLE=1 env XPTI_FRAMEWORK_DISPATCHER=%xptifw_dispatcher env XPTI_SUBSCRIBERS=%t_collector.dll %{run} %t.out | FileCheck %s

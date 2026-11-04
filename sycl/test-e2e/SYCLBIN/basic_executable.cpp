@@ -1,4 +1,4 @@
-// REQUIRES: aspect-usm_device_allocations
+// REQUIRES: aspect-usm_shared_allocations
 
 // -- Basic test for compiling and loading a SYCLBIN kernel_bundle in executable
 // -- state.

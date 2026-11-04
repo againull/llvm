@@ -1,5 +1,5 @@
 // Only L0V2 supports urEnqueueHostTaskExp.
-// REQUIRES: level_zero_v2_adapter
+// REQUIRES: level_zero_v2_adapter, aspect-usm_device_allocations, aspect-usm_host_allocations
 
 // UNSUPPORTED: windows && gpu-intel-gen12
 // UNSUPPORTED-INTENDED: UR_DEVICE_INFO_ENQUEUE_HOST_TASK_SUPPORT_EXP is not

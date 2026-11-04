@@ -13,3 +13,4 @@
 #include "device_global_arrow.hpp"
 
 int main() { return test(); }
+// REQUIRES: aspect-usm_device_allocations

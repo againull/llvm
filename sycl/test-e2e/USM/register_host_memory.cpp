@@ -1,4 +1,4 @@
-// REQUIRES: aspect-ext_oneapi_register_host_memory
+// REQUIRES: aspect-ext_oneapi_register_host_memory, aspect-usm_host_allocations
 // REQUIRES: level_zero_v2_adapter
 
 // RUN: %{build} -o %t.out

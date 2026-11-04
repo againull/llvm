@@ -2,7 +2,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// REQUIRES: level_zero, gpu, level_zero_v2_adapter
+// REQUIRES: level_zero, gpu, level_zero_v2_adapter, aspect-usm_device_allocations
 // UNSUPPORTED: run-mode && !two-or-more-gpu-devices
 // UNSUPPORTED-INTENDED: Directional P2P residency requires two GPU devices.
 

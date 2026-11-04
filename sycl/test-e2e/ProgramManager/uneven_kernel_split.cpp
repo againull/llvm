@@ -1,4 +1,4 @@
-// REQUIRES: any-device-is-cpu, gpu, opencl-aot, ocloc, target-spir, opencl-cpu-rt
+// REQUIRES: any-device-is-cpu, gpu, opencl-aot, ocloc, target-spir, opencl-cpu-rt, aspect-usm_shared_allocations
 
 // New offload model uses AOT flags at compile time, the old offload model at
 // link time.

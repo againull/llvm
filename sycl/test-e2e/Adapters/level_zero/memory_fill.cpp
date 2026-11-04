@@ -1,4 +1,4 @@
-// REQUIRES: gpu, level_zero, level_zero_dev_kit
+// REQUIRES: gpu, level_zero, level_zero_dev_kit, aspect-usm_device_allocations
 // UNSUPPORTED: level_zero_v2_adapter
 // UNSUPPORTED-INTENDED: v2 adapter does not allow specifying command queue.
 

@@ -1,3 +1,4 @@
+// REQUIRES: aspect-usm_shared_allocations
 // UNSUPPORTED: target-native_cpu
 // UNSUPPORTED-TRACKER: https://github.com/intel/llvm/issues/20142
 // UNSUPPORTED: windows && !aspect-fp64

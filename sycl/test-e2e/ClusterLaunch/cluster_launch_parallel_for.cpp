@@ -1,6 +1,6 @@
 // Tests whether or not cluster launch was successful, with the correct ranges
 // that were passed via parallel for overload
-// REQUIRES: target-nvidia, aspect-ext_oneapi_cuda_cluster_group
+// REQUIRES: target-nvidia, aspect-ext_oneapi_cuda_cluster_group, aspect-usm_device_allocations
 // RUN: %{build} -Xsycl-target-backend --cuda-gpu-arch=sm_90 -o %t.out
 // RUN: %{run} %t.out
 

@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// REQUIRES: ocloc && (opencl || level_zero)
+// REQUIRES: ocloc && (opencl || level_zero), aspect-usm_shared_allocations
 
 // RUN: %{build} -o %t.out
 // RUN: %{run} %t.out

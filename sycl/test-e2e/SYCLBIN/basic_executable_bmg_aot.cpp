@@ -1,4 +1,4 @@
-// REQUIRES: aspect-usm_device_allocations, ocloc, arch-intel_gpu_bmg_g21
+// REQUIRES: aspect-usm_shared_allocations, ocloc, arch-intel_gpu_bmg_g21
 
 // -- Basic test for compiling and loading a SYCLBIN kernel_bundle in executable
 // -- state using only AOT target for BMG G21.

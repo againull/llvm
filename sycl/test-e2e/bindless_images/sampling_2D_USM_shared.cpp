@@ -1,4 +1,4 @@
-// REQUIRES: aspect-ext_oneapi_bindless_images_shared_usm
+// REQUIRES: aspect-ext_oneapi_bindless_images_shared_usm, aspect-usm_shared_allocations
 
 // This test is unstable (sometimes passes) on HIP-AMD platforms.
 // UNSUPPORTED: hip

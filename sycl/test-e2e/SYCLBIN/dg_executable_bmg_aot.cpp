@@ -1,4 +1,4 @@
-// REQUIRES: aspect-usm_device_allocations, ocloc, arch-intel_gpu_bmg_g21
+// REQUIRES: aspect-usm_shared_allocations, ocloc, arch-intel_gpu_bmg_g21
 
 // -- Test for using device globals in SYCLBIN using only AOT target for BMG
 // G21.

@@ -1,3 +1,4 @@
+// REQUIRES: aspect-usm_host_allocations
 // RUN: %{build} -Wno-error=unused-command-line-argument -fsycl-dead-args-optimization -o %t1.out
 // RUN: %{run} %t1.out
 

@@ -1,4 +1,4 @@
-// REQUIRES: cpu
+// REQUIRES: cpu, aspect-usm_host_allocations
 // RUN: %{build} -o %t.out
 // RUN: %{run} sycl-trace --sycl %t.out | FileCheck %s
 

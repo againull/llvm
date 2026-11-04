@@ -1,6 +1,6 @@
 // Tests tracing of in-memory kernel and program cache.
 
-// REQUIRES: jit
+// REQUIRES: jit, aspect-usm_device_allocations
 
 // RUN: %{build} -o %t.out
 

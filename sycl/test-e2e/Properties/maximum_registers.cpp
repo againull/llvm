@@ -13,7 +13,7 @@
 //   * Free function kernels and lambda kernels.
 //   * maximum_registers<num> and maximum_registers_automatic.
 
-// REQUIRES: arch-intel_gpu_bmg_g21 || arch-intel_gpu_cri
+// REQUIRES: arch-intel_gpu_bmg_g21 || arch-intel_gpu_cri, aspect-usm_shared_allocations
 
 // UNSUPPORTED: spirv-backend
 // UNSUPPORTED-INTENDED: The required SPIR-V extensions are not supported.

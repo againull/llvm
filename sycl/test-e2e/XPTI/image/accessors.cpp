@@ -81,3 +81,4 @@ int main() {
   return 0;
 }
 #endif
+// REQUIRES: aspect-fp16

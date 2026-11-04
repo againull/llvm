@@ -1,4 +1,4 @@
-// REQUIRES: (opencl || level_zero) && gpu && ocloc && target-spir
+// REQUIRES: (opencl || level_zero) && gpu && ocloc && target-spir, aspect-usm_host_allocations
 
 // Check the case when -fsycl-add-default-spec-consts-image option is used which
 // results in generation of two types of images: where specialization constants

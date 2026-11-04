@@ -4,7 +4,7 @@
 // registered, not just those from the main image.
 
 // REQUIRES-INTEL-DRIVER: lin: 37170
-// REQUIRES: target-spir
+// REQUIRES: target-spir, aspect-usm_device_allocations
 
 // UNSUPPORTED: opencl && gpu
 // UNSUPPORTED-TRACKER: GSD-12574

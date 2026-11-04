@@ -1,3 +1,4 @@
+// REQUIRES: aspect-usm_device_allocations
 // RUN: %{build} -o %t.out %threads_lib
 // RUN: %{run} %t.out
 //

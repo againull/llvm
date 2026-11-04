@@ -41,14 +41,18 @@ int main(int argc, char *argv[]) {
     }
   }
   // Bad size, host
-  p = malloc(-1, q, usm::alloc::host);
-  std::cout << "p = " << p << std::endl;
-  if (p != nullptr)
-    return 2;
-  p = malloc(-1, q, usm::alloc::device);
-  std::cout << "p = " << p << std::endl;
-  if (p != nullptr)
-    return 3;
+  if (q.get_device().has(aspect::usm_host_allocations)) {
+    p = malloc(-1, q, usm::alloc::host);
+    std::cout << "p = " << p << std::endl;
+    if (p != nullptr)
+      return 2;
+  }
+  if (q.get_device().has(aspect::usm_device_allocations)) {
+    p = malloc(-1, q, usm::alloc::device);
+    std::cout << "p = " << p << std::endl;
+    if (p != nullptr)
+      return 3;
+  }
   if (q.get_device().has(aspect::usm_shared_allocations)) {
     p = malloc(-1, q, usm::alloc::shared);
     std::cout << "p = " << p << std::endl;
@@ -61,14 +65,18 @@ int main(int argc, char *argv[]) {
     return 5;
 
   // Bad size, auto aligned
-  p = aligned_alloc(0, -1, q, usm::alloc::host);
-  std::cout << "p = " << p << std::endl;
-  if (p != nullptr)
-    return 6;
-  p = aligned_alloc(0, -1, q, usm::alloc::device);
-  std::cout << "p = " << p << std::endl;
-  if (p != nullptr)
-    return 7;
+  if (q.get_device().has(aspect::usm_host_allocations)) {
+    p = aligned_alloc(0, -1, q, usm::alloc::host);
+    std::cout << "p = " << p << std::endl;
+    if (p != nullptr)
+      return 6;
+  }
+  if (q.get_device().has(aspect::usm_device_allocations)) {
+    p = aligned_alloc(0, -1, q, usm::alloc::device);
+    std::cout << "p = " << p << std::endl;
+    if (p != nullptr)
+      return 7;
+  }
   if (q.get_device().has(aspect::usm_shared_allocations)) {
     p = aligned_alloc(0, -1, q, usm::alloc::shared);
     std::cout << "p = " << p << std::endl;

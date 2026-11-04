@@ -1,3 +1,4 @@
+// REQUIRES: aspect-usm_shared_allocations
 // RUN: %{build} -foffload-fp32-prec-div -foffload-fp32-prec-sqrt -o %t.out
 // RUN: %{run} %t.out
 

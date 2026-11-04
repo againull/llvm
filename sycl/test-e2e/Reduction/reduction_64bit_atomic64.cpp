@@ -1,4 +1,4 @@
-// REQUIRES: aspect-atomic64
+// REQUIRES: aspect-atomic64, aspect-usm_device_allocations
 // RUN: %{build} -o %t.out
 //
 // RUN: %{run} %t.out

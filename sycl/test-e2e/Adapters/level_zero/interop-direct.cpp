@@ -1,4 +1,4 @@
-// REQUIRES: level_zero, level_zero_dev_kit
+// REQUIRES: level_zero, level_zero_dev_kit, aspect-usm_device_allocations
 // UNSUPPORTED: ze_debug
 // UNSUPPORTED-TRACKER: https://github.com/intel/llvm/issues/22347
 // UNSUPPORTED: level_zero_v2_adapter

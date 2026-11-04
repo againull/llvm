@@ -20,3 +20,4 @@
 
 #include "discard_events_kernel_using_assert.hpp"
 #include <sycl/builtins.hpp>
+// REQUIRES: aspect-usm_host_allocations

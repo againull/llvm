@@ -1,4 +1,4 @@
-// REQUIRES: opencl || level_zero, gpu, ocloc, target-spir
+// REQUIRES: opencl || level_zero, gpu, ocloc, target-spir, aspect-usm_device_allocations
 // UNSUPPORTED: arch-intel_gpu_dg2
 // UNSUPPORTED-INTENDED: see https://github.com/intel/llvm/pull/20643
 // UNSUPPORTED: new-offload-model

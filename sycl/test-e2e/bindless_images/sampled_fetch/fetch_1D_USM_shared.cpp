@@ -1,4 +1,4 @@
-// REQUIRES: aspect-ext_oneapi_bindless_images
+// REQUIRES: aspect-ext_oneapi_bindless_images, aspect-usm_shared_allocations
 // REQUIRES: aspect-ext_oneapi_bindless_images_shared_usm
 // REQUIRES: aspect-ext_oneapi_bindless_sampled_image_fetch_1d_usm
 // UNSUPPORTED: target-amd

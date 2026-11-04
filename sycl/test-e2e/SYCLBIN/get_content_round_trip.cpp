@@ -1,4 +1,4 @@
-// REQUIRES: aspect-usm_device_allocations
+// REQUIRES: aspect-usm_shared_allocations
 
 // -- End-to-end round-trip test for kernel_bundle::ext_oneapi_get_content().
 // -- Loads a SYCLBIN file, asks the runtime for its serialized contents, then

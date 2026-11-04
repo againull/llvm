@@ -1,4 +1,4 @@
-// REQUIRES: gpu
+// REQUIRES: gpu, aspect-usm_shared_allocations
 // RUN: %{build} -D__SYCL_DISABLE_PARALLEL_FOR_RANGE_ROUNDING__ -o %t1.out
 
 // RUN: env SYCL_PARALLEL_FOR_RANGE_ROUNDING_TRACE=1 %{run} %t1.out | FileCheck %s --check-prefix CHECK-DISABLED

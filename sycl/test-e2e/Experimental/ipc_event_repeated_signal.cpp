@@ -1,4 +1,4 @@
-// REQUIRES: aspect-ext_oneapi_ipc_event
+// REQUIRES: aspect-ext_oneapi_ipc_event, aspect-usm_device_allocations
 // REQUIRES: aspect-ext_oneapi_ipc_memory
 // REQUIRES: level_zero_v2_adapter
 // REQUIRES: arch-intel_gpu_bmg_g21 || arch-intel_gpu_bmg_g31

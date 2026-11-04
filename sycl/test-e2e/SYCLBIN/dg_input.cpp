@@ -1,4 +1,4 @@
-// REQUIRES: aspect-usm_device_allocations
+// REQUIRES: aspect-usm_shared_allocations
 
 // UNSUPPORTED: cuda, hip
 // UNSUPPORTED-INTENDED: CUDA and HIP targets produce only native device

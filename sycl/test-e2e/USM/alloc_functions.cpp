@@ -1,3 +1,4 @@
+// REQUIRES: aspect-usm_device_allocations, aspect-usm_host_allocations
 // RUN: %{build} -o %t1.out
 // RUN: %{run} %t1.out
 

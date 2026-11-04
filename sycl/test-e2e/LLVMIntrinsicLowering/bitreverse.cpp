@@ -1,6 +1,6 @@
 // Test that llvm.bitreverse is lowered correctly by llvm-spirv.
 
-// REQUIRES: target-spir
+// REQUIRES: target-spir, aspect-usm_shared_allocations
 
 // XFAIL: spirv-backend
 // XFAIL-TRACKER: https://github.com/intel/llvm/issues/16318, CMPLRLLVM-62187

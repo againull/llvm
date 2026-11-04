@@ -1,4 +1,4 @@
-// REQUIRES: aspect-usm_device_allocations, target-spir, opencl-aot, opencl-cpu-rt
+// REQUIRES: aspect-usm_shared_allocations, target-spir, opencl-aot, opencl-cpu-rt
 // UNSUPPORTED: opencl && cpu
 // UNSUPPORTED-INTENDED: Multi-target SYCLBIN round-trip on the OpenCL CPU
 // runtime currently fails image selection at reload time

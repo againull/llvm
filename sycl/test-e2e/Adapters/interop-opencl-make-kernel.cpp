@@ -1,4 +1,4 @@
-// REQUIRES: opencl, opencl_icd
+// REQUIRES: opencl, opencl_icd, aspect-usm_shared_allocations
 
 // RUN: %{build} -o %t.out %opencl_lib
 // RUN: %{run} %t.out

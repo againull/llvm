@@ -1,4 +1,4 @@
-// REQUIRES: aspect-ext_oneapi_register_host_memory
+// REQUIRES: aspect-ext_oneapi_register_host_memory, aspect-usm_shared_allocations
 // REQUIRES: level_zero_v2_adapter
 // REQUIRES: linux
 

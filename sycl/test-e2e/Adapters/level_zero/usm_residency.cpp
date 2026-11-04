@@ -1,4 +1,4 @@
-// REQUIRES: gpu, level_zero
+// REQUIRES: gpu, level_zero, aspect-usm_shared_allocations, aspect-usm_device_allocations, aspect-usm_host_allocations
 // UNSUPPORTED: level_zero_v2_adapter
 // UNSUPPORTED-INTENDED: v2 adapter does not support changing residency.
 

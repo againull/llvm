@@ -1,4 +1,4 @@
-// REQUIRES: cuda || hip || level_zero
+// REQUIRES: cuda || hip || level_zero, aspect-usm_device_allocations
 // RUN:  %{build} %if target-nvidia %{ -Xsycl-target-backend=nvptx64-nvidia-cuda --cuda-gpu-arch=sm_75 %} -o %t.out
 // RUN:  %{run} %t.out
 #include <iostream>

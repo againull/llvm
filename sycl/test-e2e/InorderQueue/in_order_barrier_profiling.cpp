@@ -41,3 +41,4 @@ int main() {
       BarrierEvent.get_profiling_info<info::event_profiling::command_start>();
   assert(KernelEnd <= BarrierStart);
 }
+// REQUIRES: aspect-queue_profiling

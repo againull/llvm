@@ -1,6 +1,6 @@
 // Test early-AOT behaviors with -fsycl -fno-sycl-rdc.  This targets spir64_gen
 
-// REQUIRES: ocloc, gpu, spir-family
+// REQUIRES: ocloc, gpu, spir-family, aspect-usm_host_allocations
 
 // Build the early AOT device binaries
 // RUN: %clangxx -fsycl %aot_options -fno-sycl-rdc -c -DADD_CPP %s -o %t_add.o

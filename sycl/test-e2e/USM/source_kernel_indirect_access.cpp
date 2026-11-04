@@ -1,6 +1,6 @@
 // RUN: %{build} %opencl_lib -o %t1.out
 // RUN: %{run} %t1.out
-// REQUIRES: opencl,opencl_icd
+// REQUIRES: opencl,opencl_icd, aspect-usm_shared_allocations
 
 #include <CL/cl.h>
 #include <iostream>

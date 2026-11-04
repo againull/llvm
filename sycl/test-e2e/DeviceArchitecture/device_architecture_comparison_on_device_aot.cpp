@@ -1,4 +1,4 @@
-// REQUIRES: arch-intel_gpu_pvc, ocloc, target-spir
+// REQUIRES: arch-intel_gpu_pvc, ocloc, target-spir, aspect-usm_shared_allocations
 
 // RUN: %clangxx -fsycl -fsycl-targets=intel_gpu_pvc %s -o %t.out
 // RUN: %{run} %t.out

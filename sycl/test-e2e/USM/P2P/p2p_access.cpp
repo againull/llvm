@@ -1,4 +1,4 @@
-// REQUIRES: cuda || hip || level_zero
+// REQUIRES: cuda || hip || level_zero, aspect-usm_device_allocations
 // RUN:  %{build} -o %t.out
 // RUN:  %{run} %t.out
 #include <iostream>

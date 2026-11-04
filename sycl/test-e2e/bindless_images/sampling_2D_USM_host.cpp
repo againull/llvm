@@ -1,4 +1,4 @@
-// REQUIRES: aspect-ext_oneapi_bindless_images_2d_usm
+// REQUIRES: aspect-ext_oneapi_bindless_images_2d_usm, aspect-usm_host_allocations
 
 // Support for ZE_STRUCTURE_TYPE_CUSTOM_PITCH_EXP_DESC was added in Level Zero
 // build 38646.

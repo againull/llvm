@@ -1,3 +1,4 @@
+// REQUIRES: aspect-usm_device_allocations
 // XFAIL: gpu-intel-gen12
 // XFAIL-TRACKER: https://github.com/intel/llvm/issues/17872
 // RUN: echo "Running parallel_for benchmark without range rounding"

@@ -1,4 +1,4 @@
-// REQUIRES: level_zero
+// REQUIRES: level_zero, aspect-usm_shared_allocations, aspect-usm_device_allocations, aspect-usm_host_allocations
 // RUN: %{build} -o %t.out
 
 // UNSUPPORTED: level_zero_v2_adapter

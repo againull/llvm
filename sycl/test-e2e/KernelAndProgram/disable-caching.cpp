@@ -1,3 +1,4 @@
+// REQUIRES: aspect-usm_device_allocations
 // This test ensures created program/kernels are not retained
 // if and only if caching is disabled.
 

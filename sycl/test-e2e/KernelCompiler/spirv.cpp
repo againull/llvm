@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// REQUIRES: ocloc, target-spir
+// REQUIRES: ocloc, target-spir, aspect-usm_shared_allocations
 
 // RUN: %{build} -o %t.out
 // RUN: %{run} %t.out %S/Kernels/kernels.spv %S/Kernels/kernels_fp16.spv %S/Kernels/kernels_fp64.spv

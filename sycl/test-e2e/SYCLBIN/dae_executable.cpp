@@ -1,4 +1,4 @@
-// REQUIRES: aspect-usm_device_allocations
+// REQUIRES: aspect-usm_shared_allocations
 
 // -- Test for using a kernel from a SYCLBIN with a dead argument.
 

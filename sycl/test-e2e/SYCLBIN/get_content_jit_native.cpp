@@ -1,4 +1,4 @@
-// REQUIRES: aspect-usm_device_allocations
+// REQUIRES: aspect-usm_shared_allocations
 
 // -- End-to-end test that ext_oneapi_get_content() on an executable-state
 // -- kernel_bundle whose source image is SPIR-V emits native device code

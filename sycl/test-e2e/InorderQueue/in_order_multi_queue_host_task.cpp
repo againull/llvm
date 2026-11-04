@@ -1,3 +1,4 @@
+// REQUIRES: aspect-usm_host_allocations
 // RUN: %{build} -o %t.out
 // RUN: %{run} %t.out
 //==-------- in_order_multi_queue_host_task.cpp ---------------------------==//

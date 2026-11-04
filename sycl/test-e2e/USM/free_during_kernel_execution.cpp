@@ -1,3 +1,4 @@
+// REQUIRES: aspect-usm_host_allocations
 //==------------------- free_during_kernel_execution.cpp -------------------==//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.

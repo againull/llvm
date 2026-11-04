@@ -1,4 +1,4 @@
-// REQUIRES:  arch-intel_gpu_pvc, level_zero
+// REQUIRES: arch-intel_gpu_pvc, level_zero, aspect-usm_device_allocations, aspect-usm_host_allocations, aspect-queue_profiling
 
 // UNSUPPORTED: gpu-intel-pvc-1T
 // UNSUPPORTED-TRACKER: URLZA-437

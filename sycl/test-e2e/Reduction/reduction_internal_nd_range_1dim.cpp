@@ -18,3 +18,4 @@ int main() {
 
   return 0;
 }
+// REQUIRES: aspect-usm_device_allocations

@@ -3,7 +3,7 @@
 // continues. This test checks for deadlock to make sure SYCL_LAUNCH_BLOCKING
 // does not introduce deadlock with SYCL RT's internal synchronization.
 //
-// REQUIRES: aspect-usm_shared_allocations
+// REQUIRES: aspect-usm_shared_allocations, aspect-usm_device_allocations
 //
 // RUN: %{build} -o %t.out %threads_lib
 // RUN: env SYCL_LAUNCH_BLOCKING=1 %{run} %t.out

@@ -38,3 +38,4 @@ int main() {
   std::cout << "B packed:\n";
   test_all<half, float, layout::ext_intel_packed, (size_t)2>();
 }
+// REQUIRES: aspect-fp16

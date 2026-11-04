@@ -1,3 +1,4 @@
+// REQUIRES: aspect-usm_host_allocations, aspect-queue_profiling
 // RUN: %{build} -o %t.out
 // RUN: %{run} %t.out
 

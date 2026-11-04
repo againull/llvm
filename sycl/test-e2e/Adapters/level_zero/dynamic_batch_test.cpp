@@ -1,4 +1,4 @@
-// REQUIRES: gpu, level_zero
+// REQUIRES: gpu, level_zero, aspect-usm_shared_allocations
 // UNSUPPORTED: ze_debug, level_zero_v2_adapter
 // UNSUPPORTED-INTENDED: regular-command-list autotuning trace
 // ("Raising/Lowering QueueBatchSize") is V1-only

@@ -1,4 +1,4 @@
-// REQUIRES: gpu, level_zero
+// REQUIRES: gpu, level_zero, aspect-usm_shared_allocations
 // UNSUPPORTED: ze_debug
 // UNSUPPORTED-TRACKER: https://github.com/intel/llvm/issues/22347
 // UNSUPPORTED: level_zero_v2_adapter

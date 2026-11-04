@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// REQUIRES: sycl-jit, aspect-usm_device_allocations
+// REQUIRES: sycl-jit, aspect-usm_shared_allocations
 // REQUIRES: (opencl || level_zero)
 
 // RUN: %{build} -o %t.out

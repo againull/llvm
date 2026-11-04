@@ -5,7 +5,7 @@
 // referenced and drops the DLL import, which prevents the SYCL runtime
 // from discovering the device image in the DLL.
 
-// REQUIRES: windows
+// REQUIRES: windows, aspect-usm_device_allocations
 
 // Build the DLL using the existing input:
 // RUN: %clangxx -fsycl -fsycl-allow-device-image-dependencies -DMAKE_DLL -O2 %shared_lib %S/Inputs/d.cpp -o %t_d.dll

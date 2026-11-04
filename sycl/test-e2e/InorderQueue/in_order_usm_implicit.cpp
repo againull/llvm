@@ -1,4 +1,4 @@
-// REQUIRES: cuda
+// REQUIRES: cuda, aspect-usm_shared_allocations
 //
 // Currently only CUDA is supported: it would be necessary to generalize
 // mem_advice for other devices before adding support.

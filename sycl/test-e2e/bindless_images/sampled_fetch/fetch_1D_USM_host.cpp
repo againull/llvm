@@ -1,4 +1,4 @@
-// REQUIRES: aspect-ext_oneapi_bindless_images
+// REQUIRES: aspect-ext_oneapi_bindless_images, aspect-usm_host_allocations
 // REQUIRES: aspect-ext_oneapi_bindless_sampled_image_fetch_1d_usm
 // UNSUPPORTED: target-amd
 // UNSUPPORTED-INTENDED: Sampled fetch not currently supported on AMD

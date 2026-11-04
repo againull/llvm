@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-// REQUIRES: target-spir
+// REQUIRES: target-spir, aspect-usm_shared_allocations
 
 // REQUIRES: aspect-ext_intel_matrix
 

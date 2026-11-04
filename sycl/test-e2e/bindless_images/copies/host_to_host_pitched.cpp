@@ -1,4 +1,4 @@
-// REQUIRES: aspect-ext_oneapi_bindless_images
+// REQUIRES: aspect-ext_oneapi_bindless_images, aspect-usm_host_allocations
 // REQUIRES: aspect-ext_oneapi_bindless_images_2d_usm
 
 // XFAIL: hip

@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 // REQUIRES: (opencl || level_zero)
-// REQUIRES: sycl-jit, aspect-usm_device_allocations
+// REQUIRES: sycl-jit, aspect-usm_shared_allocations
 
 // -- Test the kernel_compiler with SYCL source.
 // RUN: %{build} -o %t.out

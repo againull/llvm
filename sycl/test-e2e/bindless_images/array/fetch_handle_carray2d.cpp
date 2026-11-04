@@ -1,4 +1,4 @@
-// REQUIRES: aspect-ext_oneapi_bindless_images
+// REQUIRES: aspect-ext_oneapi_bindless_images, aspect-usm_device_allocations
 // UNSUPPORTED: hip
 // UNSUPPORTED-INTENDED: Undetermined issue in 'create_image' in this test.
 

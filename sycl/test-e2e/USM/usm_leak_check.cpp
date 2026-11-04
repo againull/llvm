@@ -1,4 +1,4 @@
-// REQUIRES: level_zero
+// REQUIRES: level_zero, aspect-usm_shared_allocations, aspect-usm_device_allocations, aspect-usm_host_allocations
 
 // TODO: The L0 loader on Windows CI does not count zeEventCounterBasedCreate,
 // so the matching zeEventDestroy calls are reported as a negative leak there.

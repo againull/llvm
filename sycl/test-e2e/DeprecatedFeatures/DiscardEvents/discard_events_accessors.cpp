@@ -90,3 +90,4 @@ int main(int Argc, const char *Argv[]) {
   std::cout << "The test passed." << std::endl;
   return 0;
 }
+// REQUIRES: aspect-usm_host_allocations
