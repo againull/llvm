@@ -536,7 +536,9 @@ template <access::address_space space> void add_test_all() {
     add_test_orders_scopes<space, char *, ptrdiff_t>(q, N);
   }
 #endif
+#ifdef TEST_ATOMIC_FLOAT
   add_test_orders_scopes<space, float>(q, N);
+#endif
 #ifdef FULL_ATOMIC32_COVERAGE
   add_test_orders_scopes<space, int>(q, N);
   add_test_orders_scopes<space, unsigned int>(q, N);
