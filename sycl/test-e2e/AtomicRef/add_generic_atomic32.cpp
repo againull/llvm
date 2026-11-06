@@ -1,0 +1,9 @@
+// REQUIRES: target-spir
+// UNSUPPORTED: target-nvidia, target-amd, spirv-backend
+// UNSUPPORTED-INTENDED: only supported by backends with atomic16 support
+// RUN: %{build} %{full_atomic32_flags} -o %t.out
+// RUN: %{run} %t.out
+
+#include "add.h"
+
+int main() { add_test_all<access::address_space::generic_space>(); }

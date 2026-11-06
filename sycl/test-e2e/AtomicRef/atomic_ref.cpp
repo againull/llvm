@@ -1,4 +1,4 @@
-// REQUIRES: arch-intel_gpu_cri
+// REQUIRES: target-spir, aspect-ext_oneapi_atomic16, aspect-fp16, aspect-usm_shared_allocations
 // RUN: %{build} %{full_atomic_flags} -o %t.out
 // RUN: %{run} %t.out
 
