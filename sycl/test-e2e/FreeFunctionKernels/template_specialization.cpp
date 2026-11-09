@@ -160,9 +160,9 @@ void test_shared() {
   kernel_id id = ext::oneapi::experimental::get_kernel_id<sum<int *>>();
   kernel Kernel = bundle.get_kernel(id);
   Q.submit([&](handler &h) {
-     h.set_args(data);
-     h.parallel_for(nd_range{{1}, {1}}, Kernel);
-   }).wait_and_throw();
+    h.set_args(data);
+    h.parallel_for(nd_range{{1}, {1}}, Kernel);
+  }).wait_and_throw();
   assert(data[0] == 42);
   sycl::free(data, Q);
 }
