@@ -28,7 +28,8 @@ TEST_P(urLevelZeroRootDeviceTest, RepeatedCompositeQueriesOnLegacyDriver) {
     ur_device_handle_t composite = device;
     ASSERT_SUCCESS(urDeviceGetInfo(device, UR_DEVICE_INFO_COMPOSITE_DEVICE,
                                    sizeof(composite), &composite, nullptr));
-    if (version < ZE_API_VERSION_1_7)
+    if (version < ZE_API_VERSION_1_7) {
       EXPECT_EQ(composite, nullptr);
+    }
   }
 }
