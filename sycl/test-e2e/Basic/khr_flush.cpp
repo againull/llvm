@@ -1,3 +1,4 @@
+// REQUIRES: aspect-usm_host_allocations
 // RUN: %{build} -o %t.out
 // RUN: %{run} %t.out
 
@@ -9,6 +10,7 @@
 #include <sycl/usm.hpp>
 
 #include <chrono>
+#include <stdexcept>
 #include <thread>
 
 static void CheckArray(int *x, size_t buffer_size, int expected) {
@@ -42,9 +44,8 @@ void TestFunc(queue &Q) {
   while (SingleTaskEv.get_info<sycl::info::event::command_execution_status>() !=
          sycl::info::event_command_status::complete) {
     if (std::chrono::steady_clock::now() > Deadline) {
-      assert(false &&
-             "single_task in khr_flush test did not complete within 30s");
-      break;
+      throw std::runtime_error(
+          "single_task in khr_flush test did not complete within 30s");
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   };
@@ -66,9 +67,8 @@ void TestFunc(queue &Q) {
       ParallelTaskEv.get_info<sycl::info::event::command_execution_status>() !=
       sycl::info::event_command_status::complete) {
     if (std::chrono::steady_clock::now() > Deadline) {
-      assert(false &&
-             "parallel_for in khr_flush test did not complete within 60s");
-      break;
+      throw std::runtime_error(
+          "parallel_for in khr_flush test did not complete within 60s");
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   };

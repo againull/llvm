@@ -37,7 +37,10 @@ S::event HostTask_CopyBuf1ToBuf2(Context *Ctx) {
 
       bool Expected = false;
       bool Desired = true;
-      assert(Ctx->Flag.compare_exchange_strong(Expected, Desired));
+      // Execute the state change even when assertions are disabled.
+      [[maybe_unused]] const bool FlagSet =
+          Ctx->Flag.compare_exchange_strong(Expected, Desired);
+      assert(FlagSet);
 
       {
         std::lock_guard<std::mutex> Lock(Ctx->Mutex);
