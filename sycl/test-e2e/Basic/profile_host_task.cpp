@@ -50,3 +50,4 @@ int main() {
 
   return EXIT_SUCCESS;
 }
+// REQUIRES: aspect-queue_profiling

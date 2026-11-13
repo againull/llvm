@@ -43,3 +43,46 @@ TEST(DeviceGetInfo, SupportedDeviceAspects) {
 #endif // __INTEL_PREVIEW_BREAKING_CHANGES
   EXPECT_FALSE(containsAspect(DeviceAspects, aspect::cpu));
 }
+
+TEST(DeviceGetInfo, PlatformAspectsRequireAllDevices) {
+  sycl::unittest::UrMock<> Mock;
+  mock::getCallbacks().set_replace_callback("urDeviceGet", [](void *Params) {
+    auto &P = *static_cast<ur_device_get_params_t *>(Params);
+    if (*P.ppNumDevices)
+      **P.ppNumDevices = 2;
+    if (*P.pphDevices) {
+      for (uint32_t I = 0; I < std::min(*P.pNumEntries, 2u); ++I)
+        (*P.pphDevices)[I] = reinterpret_cast<ur_device_handle_t>(I + 1);
+    }
+    return UR_RESULT_SUCCESS;
+  });
+  mock::getCallbacks().set_after_callback("urDeviceGetInfo", [](void *Params) {
+    auto &P = *static_cast<ur_device_get_info_params_t *>(Params);
+    if (*P.ppPropValue) {
+      if (*P.ppropName == UR_DEVICE_INFO_TYPE)
+        *static_cast<ur_device_type_t *>(*P.ppPropValue) =
+            *P.phDevice == reinterpret_cast<ur_device_handle_t>(1)
+                ? UR_DEVICE_TYPE_CPU
+                : UR_DEVICE_TYPE_GPU;
+      if (*P.ppropName == UR_DEVICE_INFO_USM_SINGLE_SHARED_SUPPORT &&
+          *P.phDevice == reinterpret_cast<ur_device_handle_t>(2))
+        *static_cast<ur_device_usm_access_capability_flags_t *>(
+            *P.ppPropValue) = 0;
+    }
+    return UR_RESULT_SUCCESS;
+  });
+
+  const platform Plt;
+  const auto Devices = Plt.get_devices();
+  ASSERT_EQ(Devices.size(), 2u);
+  EXPECT_TRUE(Devices[0].has(aspect::cpu));
+  EXPECT_TRUE(Devices[1].has(aspect::gpu));
+  EXPECT_FALSE(Plt.has(aspect::cpu));
+  EXPECT_FALSE(Plt.has(aspect::gpu));
+  EXPECT_TRUE(Devices[0].has(aspect::usm_shared_allocations));
+  EXPECT_FALSE(Devices[1].has(aspect::usm_shared_allocations));
+  EXPECT_FALSE(Plt.has(aspect::usm_shared_allocations));
+  EXPECT_TRUE(Devices[0].has(aspect::fp64));
+  EXPECT_TRUE(Devices[1].has(aspect::fp64));
+  EXPECT_TRUE(Plt.has(aspect::fp64));
+}

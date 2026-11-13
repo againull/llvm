@@ -1,100 +1,42 @@
 // RUN: %{build} -o %t.out -DSYCL_DISABLE_IMAGE_ASPECT_WARNING
-// RUN: %{run-unfiltered-devices} %t.out
+// RUN: %{run} %t.out
 
-//==--------------- aspects.cpp - SYCL device test ------------------------==//
-//
-// Returns the various aspects of a device  and platform.
-//
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
-
-#include <iostream>
+// Check that platform aspects agree with the intersection of device aspects.
 #include <sycl/detail/core.hpp>
 #include <sycl/platform.hpp>
 
-using namespace sycl;
-
-// platform::has() calls device::has() for each device on the platform.
+#include <algorithm>
+#include <cassert>
 
 int main() {
-  bool failed = false;
-  int pltIdx = 0;
-  for (const auto &plt : platform::get_platforms()) {
-    pltIdx++;
-    if (plt.has(aspect::cpu)) {
-      std::cout << "Platform #" << pltIdx
-                << " type: CPU supports:" << std::endl;
-    } else if (plt.has(aspect::gpu)) {
-      std::cout << "Platform #" << pltIdx
-                << " type: GPU supports:" << std::endl;
-    } else if (plt.has(aspect::accelerator)) {
-      std::cout << "Platform #" << pltIdx
-                << " type: Accelerator supports:" << std::endl;
-    } else if (plt.has(aspect::custom)) {
-      std::cout << "Platform #" << pltIdx
-                << " type: Custom supports:" << std::endl;
-    } else {
-      failed = true;
-      std::cout << "Failed: platform #" << pltIdx << " type: unknown"
-                << std::endl;
-      return 1;
-    }
-
-    if (plt.has(aspect::fp16)) {
-      std::cout << "  fp16" << std::endl;
-    }
-    if (plt.has(aspect::fp64)) {
-      std::cout << "  fp64" << std::endl;
-    }
-    if (plt.has(aspect::atomic64)) {
-      std::cout << "  atomic64" << std::endl;
-    }
-    if (plt.has(aspect::image)) {
-      std::cout << "  images" << std::endl;
-    }
-    if (plt.has(aspect::online_compiler)) {
-      std::cout << "  online compiler" << std::endl;
-    }
-    if (plt.has(aspect::online_linker)) {
-      std::cout << "  online linker" << std::endl;
-    }
-    if (plt.has(aspect::queue_profiling)) {
-      std::cout << "  queue profiling" << std::endl;
-    }
-    if (plt.has(aspect::usm_device_allocations)) {
-      std::cout << "  USM allocations" << std::endl;
-    }
-    if (plt.has(aspect::usm_host_allocations)) {
-      std::cout << "  USM host allocations" << std::endl;
-    }
-    if (plt.has(aspect::usm_atomic_host_allocations)) {
-      std::cout << "  USM atomic host allocations" << std::endl;
-    }
-    if (plt.has(aspect::usm_shared_allocations)) {
-      std::cout << "  USM shared allocations" << std::endl;
-    }
-    if (plt.has(aspect::usm_atomic_shared_allocations)) {
-      std::cout << "  USM atomic shared allocations" << std::endl;
-    }
-    if (plt.has(aspect::usm_system_allocations)) {
-      std::cout << "  USM system allocations" << std::endl;
-    }
-    if (plt.has(aspect::ext_oneapi_cuda_cluster_group)) {
-      std::cout << " ext_oneapi_cuda_cluster_group" << std::endl;
-    }
-    if (plt.has(aspect::ext_oneapi_atomic16)) {
-      std::cout << "  ext_oneapi_atomic16" << std::endl;
-    }
-    if (plt.has(aspect::ext_oneapi_virtual_functions)) {
-      std::cout << "  ext_oneapi_virtual_functions" << std::endl;
-    }
-    if (plt.has(aspect::ext_intel_spill_memory_size)) {
-      std::cout << "  ext_intel_spill_memory_size" << std::endl;
-    }
+  const auto Platform = sycl::device{}.get_platform();
+  const auto Devices = Platform.get_devices();
+  const sycl::aspect Aspects[] = {sycl::aspect::cpu,
+                                  sycl::aspect::gpu,
+                                  sycl::aspect::accelerator,
+                                  sycl::aspect::custom,
+                                  sycl::aspect::fp16,
+                                  sycl::aspect::fp64,
+                                  sycl::aspect::atomic64,
+                                  sycl::aspect::image,
+                                  sycl::aspect::online_compiler,
+                                  sycl::aspect::online_linker,
+                                  sycl::aspect::queue_profiling,
+                                  sycl::aspect::usm_device_allocations,
+                                  sycl::aspect::usm_host_allocations,
+                                  sycl::aspect::usm_atomic_host_allocations,
+                                  sycl::aspect::usm_shared_allocations,
+                                  sycl::aspect::usm_atomic_shared_allocations,
+                                  sycl::aspect::usm_system_allocations,
+                                  sycl::aspect::ext_oneapi_cuda_cluster_group,
+                                  sycl::aspect::ext_oneapi_atomic16,
+                                  sycl::aspect::ext_oneapi_virtual_functions,
+                                  sycl::aspect::ext_intel_spill_memory_size};
+  assert(!Devices.empty());
+  for (auto Aspect : Aspects) {
+    const bool Expected =
+        std::all_of(Devices.begin(), Devices.end(),
+                    [=](const sycl::device &Dev) { return Dev.has(Aspect); });
+    assert(Platform.has(Aspect) == Expected);
   }
-  std::cout << "Passed." << std::endl;
-  return 0;
 }

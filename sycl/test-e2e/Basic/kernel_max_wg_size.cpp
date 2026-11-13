@@ -3,7 +3,7 @@
 
 // Currently grf_size property can take value 256 (large) on PVC and DG2:
 // https://github.com/intel/llvm/blob/sycl/sycl/doc/extensions/experimental/sycl_ext_intel_grf_size.asciidoc
-// REQUIRES: arch-intel_gpu_pvc || gpu-intel-dg2
+// REQUIRES: arch-intel_gpu_pvc || gpu-intel-dg2, aspect-usm_shared_allocations
 // UNSUPPORTED: cuda || hip
 // UNSUPPORTED-INTENDED: This extension is currently implemented in DPC++ only
 // for Intel GPU devices and only when using the Level Zero backend or OpenCL
