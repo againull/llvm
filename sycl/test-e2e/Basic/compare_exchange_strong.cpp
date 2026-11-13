@@ -8,11 +8,11 @@ using namespace sycl;
 int main() {
   queue testQueue;
 
-  char testResult;
+  char testResult = 1;
+  int32_t data = 42;
   {
     buffer<char, 1> resultBuf(&testResult, range<1>(1));
 
-    int32_t data = 42;
     buffer<int32_t, 1> buf(&data, range<1>(1));
 
     testQueue.submit([&](handler &cgh) {
@@ -35,5 +35,6 @@ int main() {
     });
   }
   assert(testResult == 0 && "Test failed!");
+  assert(data == 42 && "Failed compare-exchange changed the stored value");
   return testResult;
 }

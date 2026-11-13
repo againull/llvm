@@ -16,6 +16,7 @@ int main() {
      }).wait_and_throw();
   } catch (sycl::exception &e) {
     assert(sycl::errc::kernel_not_supported == e.code());
+    return e.code() != sycl::errc::kernel_not_supported;
   }
-  return 0;
+  return 1;
 }

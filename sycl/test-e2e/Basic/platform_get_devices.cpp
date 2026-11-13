@@ -93,8 +93,8 @@ int CheckDeviceType(const sycl::platform &P, sycl::info::device_type DevType,
 
   std::unordered_set<sycl::device> UniqueDevices{Devices.begin(),
                                                  Devices.end()};
-  Check(Devices.size(), UniqueDevices.size(),
-        "Duplicate devices for " + DeviceTypeToString(DevType));
+  Failures += Check(Devices.size(), UniqueDevices.size(),
+                    "Duplicate devices for " + DeviceTypeToString(DevType));
 
   Failures +=
       Check(Devices.size(), DevCount,
@@ -133,5 +133,5 @@ int main() {
           sycl::info::device_type::automatic, sycl::info::device_type::host})
       Failures += CheckDeviceType(P, DevType, UniqueDevices);
   }
-  return Failures;
+  return Failures != 0;
 }

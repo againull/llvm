@@ -1,3 +1,4 @@
+// REQUIRES: aspect-usm_host_allocations
 // RUN: %{build} -o %t.out
 // RUN: %{run} %t.out
 // RUN: %if level_zero %{ env SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS=0 UR_L0_V2_FORCE_BATCHED=1 %{run} %t.out %}
@@ -54,6 +55,7 @@ void TestFunc(queue &Q) {
     CheckArray(Y, Size, 3200);
 
   Q.wait();
+  CheckArray(Y, Size, 3200);
 
   // After synchronization queue must be empty.
   assert(Q.ext_oneapi_empty() && "Queue is expected to be empty");

@@ -13,11 +13,12 @@ using namespace sycl;
 int main() {
   try {
     context c;
-  } catch (exception e) {
+  } catch (const exception &e) {
     if (e.code() == errc::invalid)
       std::cout << "Failed to create device for context" << std::endl;
     else
       std::cout << "Failed to create context" << std::endl;
+    return 1;
   }
 
   auto devices = device::get_devices();

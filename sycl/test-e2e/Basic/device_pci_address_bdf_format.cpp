@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
   // * {device} is a 2 character hexadecimal value.
   // * {function} is a 1 character hexadecimal value.
   const std::regex ExpectedBDFFormat{
-      "^[0-9a-fA-F]{4}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}.[0-9a-fA-F]$"};
+      "^[0-9a-fA-F]{4}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}[.][0-9a-fA-F]$"};
 
   for (const auto &plt : platform::get_platforms()) {
     for (const auto &dev : plt.get_devices()) {

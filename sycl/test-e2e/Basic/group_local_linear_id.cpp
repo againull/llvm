@@ -30,5 +30,5 @@ int main() {
     ++Failures;
     std::cout << "Read mismatch at index " << I << std::endl;
   }
-  return Failures;
+  return Failures != 0;
 }

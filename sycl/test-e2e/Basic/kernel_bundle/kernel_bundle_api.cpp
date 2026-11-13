@@ -246,7 +246,7 @@ int main() {
     });
 
     {
-      sycl::host_accessor HostAcc(Buf, sycl::write_only);
+      sycl::host_accessor HostAcc(Buf, sycl::read_only);
       assert(HostAcc[0] == 42);
     }
   }

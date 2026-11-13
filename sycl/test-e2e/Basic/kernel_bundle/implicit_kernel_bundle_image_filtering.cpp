@@ -38,7 +38,7 @@ int main() {
         [&](sycl::handler &CGH) { CGH.single_task<class Kernel2>([=]() {}); });
     Q.wait_and_throw();
   }
-  return 0;
+  return Ret != 42;
 }
 
 // --- Check that only a single program is built:

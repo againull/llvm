@@ -167,8 +167,7 @@ int main() {
   // Validate errors.
   try {
     device dev5 = device{aspect_selector<aspect::cpu, aspect::gpu>()};
-    assert(
-        "We should not be here. No known device that is both a CPU and a GPU.");
+    assert(false && "No device should be both a CPU and a GPU.");
   } catch (exception &e) {
     assert(e.code() == sycl::errc::runtime && "Incorrect error code.");
   }
@@ -176,8 +175,7 @@ int main() {
   try {
     device dev6 = device{
         aspect_selector(std::vector{aspect::cpu}, std::vector{aspect::cpu})};
-    assert("We should not be here. RequireList and DenyList impossible to "
-           "fulfill.");
+    assert(false && "RequireList and DenyList are impossible to fulfill.");
   } catch (exception &e) {
     assert(e.code() == sycl::errc::runtime && "Incorrect error code.");
   }

@@ -50,7 +50,7 @@ int main() {
 
   q.submit([&](handler &cgh) {
     auto acc = buf.get_access<access_mode::read_write>(cgh);
-    cgh.single_task<SingleTask>([=]() { acc[0] = acc[0] + 1; });
+    cgh.single_task<SingleTask>([=]() { acc[0] = 1; });
   });
 
 #ifndef __INTEL_PREVIEW_BREAKING_CHANGES

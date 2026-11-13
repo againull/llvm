@@ -1,3 +1,4 @@
+// REQUIRES: aspect-usm_host_allocations
 // RUN: %{build} -o %t.out
 // RUN: %{run} %t.out
 
@@ -54,6 +55,7 @@ void TestFunc(queue &Q) {
     CheckArray(Y, Size, 200);
 
   Q.wait();
+  CheckArray(Y, Size, 200);
 
   // After synchronization queue must be empty.
   assert(Q.khr_empty() && "Queue is expected to be empty");
