@@ -26,4 +26,6 @@ int main() {
   } catch (...) {
     // CHECK: Exception caught at File: {{.*}}report_code_loc.cpp | Function: main | Line: 25 | Column: 7
   }
+  sycl::free(mdlImag, q);
 }
+// REQUIRES: aspect-usm_device_allocations, aspect-queue_profiling

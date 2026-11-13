@@ -34,7 +34,7 @@ bool verifyProfiling(event Event) {
   return Pass;
 }
 
-// The test checks that get_profiling_info waits for command asccociated with
+// The test checks that get_profiling_info waits for command associated with
 // event to complete execution.
 int main() {
   device Dev;
@@ -65,15 +65,16 @@ int main() {
     event kernelEvent = kernelQueue.submit([&](sycl::handler &CGH) {
       CGH.single_task<class EmptyKernel>([=]() {});
     });
-    copyEvent.wait();
-    kernelEvent.wait();
-
     // Profiling with HIP / CUDA backend may produce invalid results.
     // The below check on backend type should be removed once
     // https://github.com/intel/llvm/issues/10042 is resolved.
     if (kernelQueue.get_backend() != sycl::backend::ext_oneapi_cuda &&
-        kernelQueue.get_backend() != sycl::backend::ext_oneapi_hip)
+        kernelQueue.get_backend() != sycl::backend::ext_oneapi_hip) {
       assert(verifyProfiling(copyEvent) && verifyProfiling(kernelEvent));
+    } else {
+      copyEvent.wait_and_throw();
+      kernelEvent.wait_and_throw();
+    }
   }
 
   for (size_t I = 0; I < Size; ++I) {

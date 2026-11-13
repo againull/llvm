@@ -70,7 +70,9 @@ void test(OS &out, detail::code_location &code_loc, const char *fileName,
           ? "OK"
           : "WRONG - fileName should not be present when NDEBUG defined";
 #else
-  auto fileNameResult = (strcmp(fileName, fileNameStr) == 0) ? "OK" : "WRONG";
+  auto fileNameResult =
+      (fileNameStr != nullptr && strcmp(fileName, fileNameStr) == 0) ? "OK"
+                                                                     : "WRONG";
 #endif
   out << "code_location.fileName: " << fileNameResult << "\n";
 }
@@ -83,16 +85,14 @@ int main(int argc, char **argv) {
 #ifdef NDEBUG
   std::cout << "NDEBUG, therefore no fileName" << std::endl;
 #else
-  std::cout << "NDEBUG NOT DEFINED, make sure file name isn't a full path "
-            << std::endl;
+  std::cout << "NDEBUG NOT DEFINED, therefore fileName is present" << std::endl;
   std::cout << "file name: " << code_loc.fileName() << std::endl;
 #endif
   std::cout << "------- host test -------" << std::endl;
   report(std::cout, code_loc);
 
   if (testing)
-    test(std::cout, code_loc, "code_location_e2e.cpp", "main", EXPECTED_LINE,
-         19);
+    test(std::cout, code_loc, __FILE__, "main", EXPECTED_LINE, 19);
 
   std::cout << "------- kernel test -------" << std::endl;
 
@@ -105,8 +105,7 @@ int main(int argc, char **argv) {
       report(out, kernel_loc);
 
       if (testing)
-        test(out, kernel_loc, "code_location_e2e.cpp", "operator()",
-             EXPECTED_LINE, 25);
+        test(out, kernel_loc, __FILE__, "operator()", EXPECTED_LINE, 25);
 
       out << "-------" << sycl::endl;
     });
@@ -120,10 +119,10 @@ int main(int argc, char **argv) {
 // CHECK:      code_location.functionName: OK
 // CHECK-NEXT: code_location.lineNumber: OK
 // CHECK-NEXT: code_location.columnNumber: OK
-// XHECK-NEXT: code_location.fileName: OK
+// CHECK-NEXT: code_location.fileName: OK
 
 // CHECK: ------- kernel test -------
 // CHECK:      code_location.functionName: OK
 // CHECK-NEXT: code_location.lineNumber: OK
 // CHECK-NEXT: code_location.columnNumber: OK
-// XHECK-NEXT: code_location.fileName: OK
+// CHECK-NEXT: code_location.fileName: OK

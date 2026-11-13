@@ -1,3 +1,4 @@
+// REQUIRES: aspect-usm_host_allocations, aspect-queue_profiling
 // RUN: %{build} -o %t.out
 // RUN: %{run} %t.out
 
@@ -52,13 +53,13 @@ int main(void) {
     auto memcpy_event = q.memcpy(dest, data, sizeof(int) * n);
     memcpy_event.wait();
 
-    auto memcpy_submit_time =
+    memcpy_submit_time =
         memcpy_event
             .get_profiling_info<sycl::info::event_profiling::command_submit>();
-    auto memcpy_start_time =
+    memcpy_start_time =
         memcpy_event
             .get_profiling_info<sycl::info::event_profiling::command_start>();
-    auto memcpy_end_time =
+    memcpy_end_time =
         memcpy_event
             .get_profiling_info<sycl::info::event_profiling::command_end>();
 

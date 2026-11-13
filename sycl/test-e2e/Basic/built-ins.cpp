@@ -29,12 +29,12 @@ int main() {
   q.submit([&](s::handler &CGH) {
      CGH.single_task<class printf>([=]() {
        s::ext::oneapi::experimental::printf(format, 123, 1.23f);
-       // CHECK: {{(Hello, World! 123 1.23)?}}
+       // CHECK: Hello, World! 123 1.23
      });
    }).wait();
 
   s::ext::oneapi::experimental::printf(format, 321, 3.21f);
-  // CHECK: {{(Hello, World! 123 1.23)?}}
+  // CHECK: Hello, World! 321 3.21
 
   // Test common
   {
