@@ -34,5 +34,5 @@ int main() {
   // Check integer only operators.
   CHECK_SIZES_AND_INT_ONLY_OPS(Q, Failures, int16_t);
   CHECK_SIZES_AND_INT_ONLY_OPS(Q, Failures, uint8_t);
-  return Failures;
+  return Failures != 0;
 }

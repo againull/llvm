@@ -212,5 +212,5 @@ int main() {
   if (Q.get_device().has(sycl::aspect::fp64))
     Failures += RunTest<sycl::double4>(Q);
 
-  return Failures;
+  return Failures != 0;
 }

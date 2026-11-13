@@ -7,6 +7,7 @@
 #include <sycl/builtins.hpp>
 #include <sycl/detail/vector_convert.hpp>
 
+#include <array>
 #include <cmath>
 #include <limits>
 
@@ -29,36 +30,33 @@ template <int N> bool check(vec<float, N> a, vec<float, N> b) {
   return true;
 }
 
+template <int N> vec<float, N> load_packet(const float16 &Input, size_t Index) {
+  constexpr size_t Stride = N == 3 ? 4 : N;
+  vec<float, N> Result;
+  for (size_t Lane = 0; Lane < N; ++Lane)
+    Result[Lane] = Input[Index * Stride + Lane];
+  return Result;
+}
+
 #define TEST_BUILTIN_1_VEC_IMPL(NAME, SZ)                                      \
   {                                                                            \
-    float##SZ *a = (float##SZ *)&A[0];                                         \
-    float##SZ *b = (float##SZ *)&B[0];                                         \
-    if (i < SZ_max / SZ) {                                                     \
-      if (!check(NAME(a[i]), NAME(a[i].convert<half>()).convert<float>())) {   \
-        err[0] = 1;                                                            \
+    if (i < SZ_max / (SZ == 3 ? 4 : SZ)) {                                     \
+      auto a = load_packet<SZ>(A[0], i);                                       \
+      if (!check(NAME(a), NAME(a.convert<half>()).convert<float>())) {         \
+        err[i] = 1;                                                            \
       }                                                                        \
     }                                                                          \
   }
 
 // vectors of size 3 need separate test, as they actually have the size of 4
 // elements
-#define TEST_BUILTIN_1_VEC3_IMPL(NAME)                                         \
-  {                                                                            \
-    float3 *a = (float3 *)&A[0];                                               \
-    float3 *b = (float3 *)&B[0];                                               \
-    if (i < SZ_max / 4) {                                                      \
-      if (!check(NAME(a[i]), NAME(a[i].convert<half>()).convert<float>())) {   \
-        err[0] = 1;                                                            \
-      }                                                                        \
-    }                                                                          \
-  }
+#define TEST_BUILTIN_1_VEC3_IMPL(NAME) TEST_BUILTIN_1_VEC_IMPL(NAME, 3)
 
 #define TEST_BUILTIN_1_SCAL_IMPL(NAME)                                         \
   {                                                                            \
-    float *a = (float *)&A[0];                                                 \
-    float *b = (float *)&B[0];                                                 \
-    if (!check(NAME(a[i]), (float)NAME((half)a[i]))) {                         \
-      err[0] = 1;                                                              \
+    float a = A[0][i];                                                         \
+    if (!check(NAME(a), (float)NAME((half)a))) {                               \
+      err[i] = 1;                                                              \
     }                                                                          \
   }
 
@@ -72,36 +70,25 @@ template <int N> bool check(vec<float, N> a, vec<float, N> b) {
 
 #define TEST_BUILTIN_2_VEC_IMPL(NAME, SZ)                                      \
   {                                                                            \
-    float##SZ *a = (float##SZ *)&A[0];                                         \
-    float##SZ *b = (float##SZ *)&B[0];                                         \
-    if (i < SZ_max / SZ) {                                                     \
-      if (!check(NAME(a[i], b[i]),                                             \
-                 NAME(a[i].convert<half>(), b[i].convert<half>())              \
-                     .convert<float>())) {                                     \
-        err[0] = 1;                                                            \
+    if (i < SZ_max / (SZ == 3 ? 4 : SZ)) {                                     \
+      auto a = load_packet<SZ>(A[0], i);                                       \
+      auto b = load_packet<SZ>(B[0], i);                                       \
+      if (!check(                                                              \
+              NAME(a, b),                                                      \
+              NAME(a.convert<half>(), b.convert<half>()).convert<float>())) {  \
+        err[i] = 1;                                                            \
       }                                                                        \
     }                                                                          \
   }
 
-#define TEST_BUILTIN_2_VEC3_IMPL(NAME)                                         \
-  {                                                                            \
-    float3 *a = (float3 *)&A[0];                                               \
-    float3 *b = (float3 *)&B[0];                                               \
-    if (i < SZ_max / 4) {                                                      \
-      if (!check(NAME(a[i], b[i]),                                             \
-                 NAME(a[i].convert<half>(), b[i].convert<half>())              \
-                     .convert<float>())) {                                     \
-        err[0] = 1;                                                            \
-      }                                                                        \
-    }                                                                          \
-  }
+#define TEST_BUILTIN_2_VEC3_IMPL(NAME) TEST_BUILTIN_2_VEC_IMPL(NAME, 3)
 
 #define TEST_BUILTIN_2_SCAL_IMPL(NAME)                                         \
   {                                                                            \
-    float *a = (float *)&A[0];                                                 \
-    float *b = (float *)&B[0];                                                 \
-    if (!check(NAME(a[i], b[i]), (float)NAME((half)a[i], (half)b[i]))) {       \
-      err[0] = 1;                                                              \
+    float a = A[0][i];                                                         \
+    float b = B[0][i];                                                         \
+    if (!check(NAME(a, b), (float)NAME((half)a, (half)b))) {                   \
+      err[i] = 1;                                                              \
     }                                                                          \
   }
 
@@ -115,42 +102,27 @@ template <int N> bool check(vec<float, N> a, vec<float, N> b) {
 
 #define TEST_BUILTIN_3_VEC_IMPL(NAME, SZ)                                      \
   {                                                                            \
-    float##SZ *a = (float##SZ *)&A[0];                                         \
-    float##SZ *b = (float##SZ *)&B[0];                                         \
-    float##SZ *c = (float##SZ *)&C[0];                                         \
-    if (i < SZ_max / SZ) {                                                     \
-      if (!check(NAME(a[i], b[i], c[i]),                                       \
-                 NAME(a[i].convert<half>(), b[i].convert<half>(),              \
-                      c[i].convert<half>())                                    \
+    if (i < SZ_max / (SZ == 3 ? 4 : SZ)) {                                     \
+      auto a = load_packet<SZ>(A[0], i);                                       \
+      auto b = load_packet<SZ>(B[0], i);                                       \
+      auto c = load_packet<SZ>(C[0], i);                                       \
+      if (!check(NAME(a, b, c),                                                \
+                 NAME(a.convert<half>(), b.convert<half>(), c.convert<half>()) \
                      .convert<float>())) {                                     \
-        err[0] = 1;                                                            \
+        err[i] = 1;                                                            \
       }                                                                        \
     }                                                                          \
   }
 
-#define TEST_BUILTIN_3_VEC3_IMPL(NAME)                                         \
-  {                                                                            \
-    float3 *a = (float3 *)&A[0];                                               \
-    float3 *b = (float3 *)&B[0];                                               \
-    float3 *c = (float3 *)&C[0];                                               \
-    if (i < SZ_max / 4) {                                                      \
-      if (!check(NAME(a[i], b[i], c[i]),                                       \
-                 NAME(a[i].convert<half>(), b[i].convert<half>(),              \
-                      c[i].convert<half>())                                    \
-                     .convert<float>())) {                                     \
-        err[0] = 1;                                                            \
-      }                                                                        \
-    }                                                                          \
-  }
+#define TEST_BUILTIN_3_VEC3_IMPL(NAME) TEST_BUILTIN_3_VEC_IMPL(NAME, 3)
 
 #define TEST_BUILTIN_3_SCAL_IMPL(NAME)                                         \
   {                                                                            \
-    float *a = (float *)&A[0];                                                 \
-    float *b = (float *)&B[0];                                                 \
-    float *c = (float *)&C[0];                                                 \
-    if (!check(NAME(a[i], b[i], c[i]),                                         \
-               (float)NAME((half)a[i], (half)b[i], (half)c[i]))) {             \
-      err[0] = 1;                                                              \
+    float a = A[0][i];                                                         \
+    float b = B[0][i];                                                         \
+    float c = C[0][i];                                                         \
+    if (!check(NAME(a, b, c), (float)NAME((half)a, (half)b, (half)c))) {       \
+      err[i] = 1;                                                              \
     }                                                                          \
   }
 
@@ -171,12 +143,12 @@ int main() {
     b[i] = (SZ_max - i) / (float)SZ_max;
     c[i] = (float)(3 * i);
   }
-  int err = 0;
+  std::array<int, SZ_max> errors{};
   {
     buffer<float16> a_buf(&a, 1);
     buffer<float16> b_buf(&b, 1);
     buffer<float16> c_buf(&c, 1);
-    buffer<int> err_buf(&err, 1);
+    buffer<int> err_buf(errors.data(), range<1>(SZ_max));
     q.submit([&](handler &cgh) {
       auto A = a_buf.get_access<access_mode::read>(cgh);
       auto B = b_buf.get_access<access_mode::read>(cgh);
@@ -184,6 +156,7 @@ int main() {
       auto err = err_buf.get_access<access_mode::write>(cgh);
       cgh.parallel_for(SZ_max, [=](item<1> index) {
         size_t i = index.get_id(0);
+        err[i] = 0;
         TEST_BUILTIN_1(sycl::fabs);
         TEST_BUILTIN_2(sycl::fmin);
         TEST_BUILTIN_2(sycl::fmax);
@@ -191,7 +164,8 @@ int main() {
       });
     });
   }
-  assert(err == 0);
+  for (int error : errors)
+    assert(error == 0);
 
   return 0;
 }

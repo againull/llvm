@@ -13,8 +13,9 @@ template <typename T, typename D> bool equal(T x, T y, D delta) {
   if constexpr (std::is_scalar_v<T> || std::is_same_v<sycl::half, T>) {
     return Abs(x - y) <= delta;
   } else {
+    // A NaN difference must fail the check too.
     for (size_t i = 0; i < x.size(); ++i)
-      if (Abs(x[i] - y[i]) > delta)
+      if (!(Abs(x[i] - y[i]) <= delta))
         return false;
 
     return true;

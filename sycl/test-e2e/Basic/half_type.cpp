@@ -184,12 +184,12 @@ void verify_numeric_limits(queue &q) {
 }
 
 inline bool bitwise_comparison_fp16(const half val, const uint16_t exp) {
-  return reinterpret_cast<const uint16_t &>(val) == exp;
+  return sycl::bit_cast<uint16_t>(val) == exp;
 }
 
 inline bool bitwise_comparison_fp32(const half val, const uint32_t exp) {
   const float fp32 = static_cast<float>(val);
-  return reinterpret_cast<const uint32_t &>(fp32) == exp;
+  return sycl::bit_cast<uint32_t>(fp32) == exp;
 }
 
 constexpr void constexpr_verify_add() {
@@ -273,18 +273,16 @@ int main() {
   assert(bitwise_comparison_fp16(-0.0 / 0.0, 32256));
   // special nan
   uint32_t special_nan = 0x7f800001;
-  assert(
-      bitwise_comparison_fp16(reinterpret_cast<float &>(special_nan), 32256));
+  assert(bitwise_comparison_fp16(sycl::bit_cast<float>(special_nan), 32256));
   special_nan = 0xff800001;
-  assert(
-      bitwise_comparison_fp16(reinterpret_cast<float &>(special_nan), 65024));
+  assert(bitwise_comparison_fp16(sycl::bit_cast<float>(special_nan), 65024));
   // subnormal
   assert(bitwise_comparison_fp16(9.8E-45, 0));
   assert(bitwise_comparison_fp16(-9.8E-45, 32768));
   uint32_t subnormal_in_16 = 0x38200000;
   // verify 0.000038146972 converts to 0.0000382
-  assert(bitwise_comparison_fp16(reinterpret_cast<float &>(subnormal_in_16),
-                                 0x0280));
+  assert(
+      bitwise_comparison_fp16(sycl::bit_cast<float>(subnormal_in_16), 0x0280));
   // overflow
   assert(bitwise_comparison_fp16(half(55504) * 3, 31744));
   assert(bitwise_comparison_fp16(half(-55504) * 3, 64512));
@@ -295,27 +293,22 @@ int main() {
   // The following references are from `_cvtsh_ss`.
   // +inf
   const uint16_t pinf = 0x7a00;
-  assert(bitwise_comparison_fp32(reinterpret_cast<const half &>(pinf),
-                                 1195376640));
+  assert(bitwise_comparison_fp32(sycl::bit_cast<half>(pinf), 1195376640));
   // -inf
   const uint16_t ninf = 0xfa00;
-  assert(bitwise_comparison_fp32(reinterpret_cast<const half &>(ninf),
-                                 3342860288));
+  assert(bitwise_comparison_fp32(sycl::bit_cast<half>(ninf), 3342860288));
   // +0
   const uint16_t p0 = 0x0;
-  assert(bitwise_comparison_fp32(reinterpret_cast<const half &>(p0), 0));
+  assert(bitwise_comparison_fp32(sycl::bit_cast<half>(p0), 0));
   // -0
   const uint16_t n0 = 0x8000;
-  assert(
-      bitwise_comparison_fp32(reinterpret_cast<const half &>(n0), 2147483648));
+  assert(bitwise_comparison_fp32(sycl::bit_cast<half>(n0), 2147483648));
   // nan
   const uint16_t nan16 = 0x7a03;
-  assert(bitwise_comparison_fp32(reinterpret_cast<const half &>(nan16),
-                                 1195401216));
+  assert(bitwise_comparison_fp32(sycl::bit_cast<half>(nan16), 1195401216));
   // subnormal
   const uint16_t subnormal = 0x0005;
-  assert(bitwise_comparison_fp32(reinterpret_cast<const half &>(subnormal),
-                                 882900992));
+  assert(bitwise_comparison_fp32(sycl::bit_cast<half>(subnormal), 882900992));
 
   // std::hash<sycl::half>
   std::unordered_set<half> sets;

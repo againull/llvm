@@ -33,5 +33,5 @@ int main() {
   CHECK_SIZES_AND_OPS(Q, Failures, int32_t);
   CHECK_SIZES_AND_OPS(Q, Failures, uint8_t);
   CHECK_SIZES_AND_OPS(Q, Failures, uint16_t);
-  return Failures;
+  return Failures != 0;
 }

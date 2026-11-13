@@ -47,13 +47,14 @@ bool testAndOperator(const std::string &typeName) {
    }).wait();
 
   bool passed = true;
-  ResultT expected = results[0];
+  sycl::host_accessor hostAcc{buffer, sycl::read_only};
+  ResultT expected = static_cast<ResultT>(-1);
 
   std::cout << "Testing with T = " << typeName << std::endl;
   std::cout << "Expected: " << (int)expected << std::endl;
-  for (int i = 1; i < N; i++) {
-    std::cout << "Test " << (i - 1) << ": " << ((int)results[i]) << std::endl;
-    passed &= expected == results[i];
+  for (int i = 0; i < N; i++) {
+    std::cout << "Test " << i << ": " << ((int)hostAcc[i]) << std::endl;
+    passed &= expected == hostAcc[i];
   }
   std::cout << std::endl;
   return passed;

@@ -256,9 +256,9 @@ int main() {
   }
 
   {
-    int FF[8] = {1, 1, 1, 0, 1, 1, 1, 0};
+    int3 FF[2] = {int3{1}, int3{1}};
     {
-      buffer<int3, 1> b((int3 *)FF, range<1>(2));
+      buffer<int3, 1> b(FF, range<1>(2));
       queue myQueue;
       myQueue.submit([&](handler &cgh) {
         auto B = b.get_access<access_mode::read_write>(cgh);
@@ -266,12 +266,12 @@ int main() {
             range<1>{2}, [=](id<1> ID) { B[ID] = int3{(int3)ID[0]} / B[ID]; });
       });
     }
-    assert(FF[0] == 0);
-    assert(FF[1] == 0);
-    assert(FF[2] == 0);
-    assert(FF[4] == 1);
-    assert(FF[5] == 1);
-    assert(FF[6] == 1);
+    assert(FF[0][0] == 0);
+    assert(FF[0][1] == 0);
+    assert(FF[0][2] == 0);
+    assert(FF[1][0] == 1);
+    assert(FF[1][1] == 1);
+    assert(FF[1][2] == 1);
   }
   {
     int3 result = {0, 0, 0};
