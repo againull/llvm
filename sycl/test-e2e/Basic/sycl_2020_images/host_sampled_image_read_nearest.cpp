@@ -144,5 +144,5 @@ int main() {
   Failures += checkForFormat<image_format::r16b16g16a16_sfloat>();
   Failures += checkForFormat<image_format::r32g32b32a32_sfloat>();
   Failures += checkForFormat<image_format::b8g8r8a8_unorm>();
-  return Failures;
+  return Failures != 0;
 }

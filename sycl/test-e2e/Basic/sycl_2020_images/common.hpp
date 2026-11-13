@@ -262,6 +262,21 @@ bool IsOutOfBounds(CoordT<ImgT, Dims> Coord, range<Dims> ImageRange) {
   }
 }
 
+template <int Dims>
+bool IsLinearReadInBounds(SampledCoordT<Dims> Coord, range<Dims> ImageRange,
+                          bool Normalized) {
+  if (Normalized)
+    Coord *= RangeToCoord<ImageType::Sampled, Dims>(ImageRange);
+  if constexpr (Dims == 1) {
+    return Coord >= 0.5f && Coord < ImageRange[0] - 0.5f;
+  } else {
+    for (int I = 0; I < Dims; ++I)
+      if (Coord[I] < 0.5f || Coord[I] >= ImageRange[I] - 0.5f)
+        return false;
+    return true;
+  }
+}
+
 template <typename T, int Dims> bool AllTrue(const vec<T, Dims> &Vec) {
   for (size_t I = 0; I < Dims; ++I)
     if (!Vec[I])

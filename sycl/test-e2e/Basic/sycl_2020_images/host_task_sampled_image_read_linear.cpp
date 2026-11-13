@@ -53,6 +53,13 @@ bool checkSampledImageHostTaskReadLinear(
                            : Offset;
             auto OffsetCoord = Coord + AdjOffset;
 
+            // With no addressing mode, every pixel used by the filter must be
+            // in range.
+            if constexpr (AddrMode == addressing_mode::none)
+              if (!IsLinearReadInBounds<Dims>(OffsetCoord, ImageRange,
+                                              Normalized))
+                continue;
+
             float4 ReadVal = Acc.read(OffsetCoord).template convert<float>();
             float4 ExpectedVal = CalcLinearRead<Format, AddrMode, Dims>(
                 RefData, OffsetCoord, ImagePitch, ImageRange, Normalized);
@@ -167,5 +174,5 @@ int main() {
   Failures += checkForFormat<image_format::r16b16g16a16_sfloat>(Q);
   Failures += checkForFormat<image_format::r32g32b32a32_sfloat>(Q);
   Failures += checkForFormat<image_format::b8g8r8a8_unorm>(Q);
-  return Failures;
+  return Failures != 0;
 }
