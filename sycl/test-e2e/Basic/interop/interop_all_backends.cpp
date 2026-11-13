@@ -1,14 +1,21 @@
 // XFAIL: windows && run-mode && cuda
 // XFAIL-TRACKER: https://github.com/intel/llvm/issues/23547
 
-// RUN: %if target-spir %{ %{build} -o %t-opencl.out %}
-// RUN: %if target-nvidia %{ %{build} -DBUILD_FOR_CUDA -DSYCL_EXT_ONEAPI_BACKEND_CUDA_EXPERIMENTAL -o %t-cuda.out %}
-// RUN: %if target-amd %{ %{build} -DBUILD_FOR_HIP -o %t-hip.out %}
+// REQUIRES: opencl || cuda || hip, aspect-usm_device_allocations
 
+// RUN: %if target-spir %{ %{build} -o %t-opencl.out %}
+// RUN: %if opencl %{ %{run} %t-opencl.out %}
+// RUN: %if target-nvidia %{ %{build} -DBUILD_FOR_CUDA -DSYCL_EXT_ONEAPI_BACKEND_CUDA_EXPERIMENTAL -o %t-cuda.out %}
+// RUN: %if cuda %{ %{run} %t-cuda.out %}
+// RUN: %if target-amd %{ %{build} -DBUILD_FOR_HIP -o %t-hip.out %}
+// RUN: %if hip %{ %{run} %t-hip.out %}
+
+#include <iostream>
 #include <sycl/backend.hpp>
 #include <sycl/detail/core.hpp>
 #include <sycl/properties/all_properties.hpp>
 #include <sycl/usm.hpp>
+#include <vector>
 using namespace sycl;
 
 #ifdef BUILD_FOR_CUDA
@@ -27,7 +34,7 @@ using nativeEvent = ihipEvent_t;
 constexpr auto BACKEND = backend::opencl;
 using nativeDevice = cl_device_id;
 using nativeQueue = cl_command_queue;
-using nativeEvent = cl_event;
+using nativeEvent = std::vector<cl_event>;
 #endif
 
 constexpr int N = 100;
@@ -54,12 +61,16 @@ int main() {
   context Context(InteropDevice);
 
   // Create sycl queue with device created from a native device.
-  queue Queue(InteropDevice, {sycl::property::queue::in_order()});
+  queue Queue(Context, InteropDevice, {sycl::property::queue::in_order()});
   backend_traits<BACKEND>::return_type<queue> NativeQueue =
       get_native<BACKEND>(Queue);
   auto InteropQueue = make_queue<BACKEND>(NativeQueue, Context);
 
   auto A = (int *)malloc_device(N * sizeof(int), InteropQueue);
+  if (!A) {
+    std::cerr << "Device allocation failed" << std::endl;
+    return 1;
+  }
   std::vector<int> vec(N, 0);
 
   auto Event = Queue.submit([&](handler &h) {
@@ -98,3 +109,4 @@ int main() {
 
   return 0;
 }
+// REQUIRES: aspect-usm_device_allocations

@@ -15,52 +15,63 @@
 
 #include <cassert>
 #include <iostream>
+#include <stdexcept>
+#include <string>
 #include <vector>
+
+void check_ze(ze_result_t Status) {
+  if (Status != ZE_RESULT_SUCCESS)
+    throw std::runtime_error("Level Zero API failed: " +
+                             std::to_string(static_cast<unsigned int>(Status)));
+}
 
 int main(int argc, char *argv[]) {
   int level0DriverIndex = 0;
   int level0DeviceIndex = 0;
 
-  ze_result_t result = zeInit(0);
-  assert(result == ZE_RESULT_SUCCESS);
+  check_ze(zeInit(0));
 
   uint32_t level0NumDrivers = 0;
-  zeDriverGet(&level0NumDrivers, nullptr);
+  check_ze(zeDriverGet(&level0NumDrivers, nullptr));
 
-  assert(level0NumDrivers > 0);
+  if (level0NumDrivers == 0)
+    return 1;
 
   std::vector<ze_driver_handle_t> level0Drivers(level0NumDrivers);
-  zeDriverGet(&level0NumDrivers, level0Drivers.data());
+  check_ze(zeDriverGet(&level0NumDrivers, level0Drivers.data()));
 
   ze_driver_handle_t level0Driver = level0Drivers[level0DriverIndex];
   uint32_t level0NumDevices = 0;
-  zeDeviceGet(level0Driver, &level0NumDevices, nullptr);
+  check_ze(zeDeviceGet(level0Driver, &level0NumDevices, nullptr));
 
-  assert(level0NumDevices > 0);
+  if (level0NumDevices == 0)
+    return 1;
 
   std::vector<ze_device_handle_t> level0Devices(level0NumDevices);
-  zeDeviceGet(level0Driver, &level0NumDevices, level0Devices.data());
+  check_ze(zeDeviceGet(level0Driver, &level0NumDevices, level0Devices.data()));
 
   ze_device_handle_t level0Device = level0Devices[level0DeviceIndex];
   ze_context_handle_t level0Context = nullptr;
   ze_context_desc_t level0ContextDesc = {};
   level0ContextDesc.stype = ZE_STRUCTURE_TYPE_CONTEXT_DESC;
-  zeContextCreateEx(level0Driver, &level0ContextDesc, 1, &level0Device,
-                    &level0Context);
+  check_ze(zeContextCreateEx(level0Driver, &level0ContextDesc, 1, &level0Device,
+                             &level0Context));
 
-  sycl::device dev;
-  sycl::device interopDev =
-      sycl::make_device<sycl::backend::ext_oneapi_level_zero>(level0Device);
-  sycl::context interopCtx =
-      sycl::make_context<sycl::backend::ext_oneapi_level_zero>(
-          {level0Context,
-           {interopDev},
-           sycl::ext::oneapi::level_zero::ownership::keep});
+  {
+    sycl::device dev;
+    sycl::device interopDev =
+        sycl::make_device<sycl::backend::ext_oneapi_level_zero>(level0Device);
+    sycl::context interopCtx =
+        sycl::make_context<sycl::backend::ext_oneapi_level_zero>(
+            {level0Context,
+             {interopDev},
+             sycl::ext::oneapi::level_zero::ownership::keep});
 
-  assert(interopCtx.get_devices().size() == 1);
-  assert(interopCtx.get_devices()[0] == interopDev);
-  sycl::queue q{interopCtx, interopDev};
+    assert(interopCtx.get_devices().size() == 1);
+    assert(interopCtx.get_devices()[0] == interopDev);
+    sycl::queue q{interopCtx, interopDev};
+  }
 
-  zeContextDestroy(level0Context);
+  check_ze(zeContextDestroy(level0Context));
   return 0;
 }
