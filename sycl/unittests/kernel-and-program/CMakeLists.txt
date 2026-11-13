@@ -7,6 +7,7 @@ add_sycl_unittest(KernelAndProgramTests OBJECT
   PersistentDeviceCodeCache.cpp
   KernelBuildOptions.cpp
   OutOfResources.cpp
+  WorkGroupLimits.cpp
   InMemCacheEviction.cpp
   KernelArgs.cpp
   KernelInfoShortcuts.cpp
