@@ -8,12 +8,6 @@
 
 using namespace sycl;
 
-// Forward-declare the test kernel type names.
-// Required per specification as complete, stable type in the namespace scope.
-class A;
-class B;
-class C;
-
 template <typename T, class BinaryOperation>
 void initInputData(buffer<T, 1> &InBuf, T &ExpectedOut, T Identity,
                    BinaryOperation BOp, size_t N) {
