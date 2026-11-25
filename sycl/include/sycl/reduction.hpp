@@ -1231,6 +1231,53 @@ using get_reduction_kernel_name_t =
     typename get_reduction_kernel_name<MainOrAux, KernelName, Dims, KernelType,
                                        Strategy, Ts...>::type;
 
+namespace reduction {
+template <typename UserName, strategy Strategy, int Dims, bool IsAux,
+          typename Variant>
+class KernelEntryPoint;
+} // namespace reduction
+
+template <reduction::strategy Strategy, typename... Ts>
+struct reduction_kernel_variant {
+  using type = std::conditional_t<
+      (std::is_same_v<Ts, KernelOneWGTag> || ...), KernelOneWGTag,
+      std::conditional_t<(std::is_same_v<Ts, KernelMultipleWGTag> || ...),
+                         KernelMultipleWGTag, void>>;
+};
+
+template <typename Reduction, typename Out, typename PartialSums,
+          typename Counter>
+struct reduction_kernel_variant<
+    reduction::strategy::group_reduce_and_last_wg_detection, Reduction, Out,
+    PartialSums, Counter> {
+  using type = Counter;
+};
+
+// Keep explicit kernel names on the compiler's type-based metadata path. The
+// functor can include local types (e.g. the user lambda) that do not belong in
+// the name. Truly unnamed kernels still use their functor type as their name.
+template <typename UserName, typename Functor> struct reduction_entry_point;
+
+template <typename UserName,
+          template <typename, reduction::strategy, int, typename...> class Kind,
+          typename Name, reduction::strategy Strategy, int Dims,
+          typename KernelType, typename... Ts>
+struct reduction_entry_point<UserName,
+                             Kind<Name, Strategy, Dims, KernelType, Ts...>> {
+  using Functor = Kind<Name, Strategy, Dims, KernelType, Ts...>;
+  static constexpr bool IsAux = std::is_same_v<
+      Functor, reduction::AuxKrn<Name, Strategy, Dims, KernelType, Ts...>>;
+  using type = std::conditional_t<
+      std::is_same_v<UserName, auto_name>, Functor,
+      reduction::KernelEntryPoint<
+          UserName, Strategy, Dims, IsAux,
+          typename reduction_kernel_variant<Strategy, Ts...>::type>>;
+};
+
+template <typename UserName, typename Functor>
+using reduction_entry_point_t =
+    typename reduction_entry_point<UserName, Functor>::type;
+
 using __sycl_reduction_kernel_info =
     std::pair</*IsAuxKernel*/ bool,
               /*KernelTag*/ __sycl_reduction_kernel_tag_type>;
@@ -1312,7 +1359,7 @@ struct NDRangeReduction<reduction::strategy::local_atomic_and_atomic_cross_wg> {
                                     KernelType, Strategy, Reduction, OutType>;
 
     std::unordered_map<kernel_id, __sycl_reduction_kernel_info> Map{
-        {get_kernel_id<Name>(),
+        {get_kernel_id<reduction_entry_point_t<KernelName, Name>>(),
          std::make_pair(/*IsAuxKernel*/ false, /*KernelTag*/ std::nullopt)}};
     return Map;
   }
@@ -1341,7 +1388,8 @@ struct NDRangeReduction<reduction::strategy::local_atomic_and_atomic_cross_wg> {
           get_reduction_kernel_name_t<reduction::MainKrn, KernelName, Dims,
                                       KernelType, Strategy, Reduction, OutType>;
       RedName Krn{Out, GroupSum, KernelFunc};
-      CGH.parallel_for<RedName>(NDRange, Properties, Krn);
+      CGH.parallel_for<reduction_entry_point_t<KernelName, RedName>>(
+          NDRange, Properties, Krn);
     });
   }
 };
@@ -1481,7 +1529,7 @@ struct NDRangeReduction<
           OutAccType, PartialSumsAccType, PredAccType>;
 
       std::unordered_map<kernel_id, __sycl_reduction_kernel_info> Map{
-          {get_kernel_id<Name>(),
+          {get_kernel_id<reduction_entry_point_t<KernelName, Name>>(),
            std::make_pair(/*IsAuxKernel*/ false, /*KernelTag*/ std::nullopt)}};
       return Map;
     } else {
@@ -1492,7 +1540,7 @@ struct NDRangeReduction<
           OutAccType, PartialSumsAccType, PredAccType>;
 
       std::unordered_map<kernel_id, __sycl_reduction_kernel_info> Map{
-          {get_kernel_id<Name>(),
+          {get_kernel_id<reduction_entry_point_t<KernelName, Name>>(),
            std::make_pair(/*IsAuxKernel*/ false, /*KernelTag*/ std::nullopt)}};
       return Map;
     }
@@ -1524,7 +1572,8 @@ struct NDRangeReduction<
       Name Krn(Out, PartialSums, NWorkGroupsFinished,
                DoReducePartialSumsInLastWG, IsUpdateOfUserVar, NWorkGroups,
                WGSize, KernelFunc);
-      CGH.parallel_for<Name>(NDRange, Properties, Krn);
+      CGH.parallel_for<reduction_entry_point_t<KernelName, Name>>(
+          NDRange, Properties, Krn);
     };
 
     auto device = getDeviceFromHandler(CGH);
@@ -1783,7 +1832,7 @@ template <> struct NDRangeReduction<reduction::strategy::range_basic> {
                                     PartialSumsType, PredicateType>;
 
     std::unordered_map<kernel_id, __sycl_reduction_kernel_info> Map{
-        {get_kernel_id<Name>(),
+        {get_kernel_id<reduction_entry_point_t<KernelName, Name>>(),
          std::make_pair(/*IsAuxKernel*/ false, /*KernelTag*/ std::nullopt)}};
     return Map;
   }
@@ -1836,7 +1885,8 @@ template <> struct NDRangeReduction<reduction::strategy::range_basic> {
     RedName Krn(Out, PartialSums, NWorkGroupsFinished, IdentityContainer, BOp,
                 LocalReds, DoReducePartialSumsInLastWG, IsUpdateOfUserVar,
                 NWorkGroups, WGSize, KernelFunc);
-    CGH.parallel_for<RedName>(NDRange, Properties, Krn);
+    CGH.parallel_for<reduction_entry_point_t<KernelName, RedName>>(
+        NDRange, Properties, Krn);
   }
 };
 
@@ -1895,7 +1945,7 @@ struct NDRangeReduction<reduction::strategy::group_reduce_and_atomic_cross_wg> {
         get_reduction_kernel_name_t<reduction::MainKrn, KernelName, Dims,
                                     KernelType, Strategy, Reduction, OutType>;
     std::unordered_map<kernel_id, __sycl_reduction_kernel_info> Map{
-        {get_kernel_id<Name>(),
+        {get_kernel_id<reduction_entry_point_t<KernelName, Name>>(),
          std::make_pair(/*IsAuxKernel*/ false, /*KernelTag*/ std::nullopt)}};
     return Map;
   }
@@ -1920,7 +1970,8 @@ struct NDRangeReduction<reduction::strategy::group_reduce_and_atomic_cross_wg> {
           get_reduction_kernel_name_t<reduction::MainKrn, KernelName, Dims,
                                       KernelType, Strategy, Reduction, OutType>;
       RedName Krn(Out, KernelFunc);
-      CGH.parallel_for<RedName>(NDRange, Properties, Krn);
+      CGH.parallel_for<reduction_entry_point_t<KernelName, RedName>>(
+          NDRange, Properties, Krn);
     });
   }
 };
@@ -2003,7 +2054,7 @@ struct NDRangeReduction<
         get_reduction_kernel_name_t<reduction::MainKrn, KernelName, Dims,
                                     KernelType, Strategy, Reduction, OutType>;
     std::unordered_map<kernel_id, __sycl_reduction_kernel_info> Map{
-        {get_kernel_id<Name>(),
+        {get_kernel_id<reduction_entry_point_t<KernelName, Name>>(),
          std::make_pair(/*IsAuxKernel*/ false, /*KernelTag*/ std::nullopt)}};
     return Map;
   }
@@ -2034,7 +2085,8 @@ struct NDRangeReduction<
           get_reduction_kernel_name_t<reduction::MainKrn, KernelName, Dims,
                                       KernelType, Strategy, Reduction, OutType>;
       RedName Krn{Out, LocalReds, KernelFunc};
-      CGH.parallel_for<RedName>(NDRange, Properties, Krn);
+      CGH.parallel_for<reduction_entry_point_t<KernelName, RedName>>(
+          NDRange, Properties, Krn);
     });
   }
 };
@@ -2160,9 +2212,9 @@ struct NDRangeReduction<
                                     AuxInType>;
 
     std::unordered_map<kernel_id, __sycl_reduction_kernel_info> Map{
-        {get_kernel_id<Name>(),
+        {get_kernel_id<reduction_entry_point_t<KernelName, Name>>(),
          std::make_pair(/*IsAuxKernel*/ false, /*KernelTag*/ std::nullopt)},
-        {get_kernel_id<AuxName>(),
+        {get_kernel_id<reduction_entry_point_t<KernelName, AuxName>>(),
          std::make_pair(/*IsAuxKernel*/ true, /*KernelTag*/ std::nullopt)}};
     return Map;
   }
@@ -2207,7 +2259,8 @@ struct NDRangeReduction<
                                              Dims, KernelType, Strategy,
                                              Reduction, decltype(Out)>;
     Name Krn(Out, IsUpdateOfUserVar, KernelFunc);
-    CGH.parallel_for<Name>(NDRange, Properties, Krn);
+    CGH.parallel_for<reduction_entry_point_t<KernelName, Name>>(
+        NDRange, Properties, Krn);
 
     // Run the additional kernel as many times as needed to reduce all partial
     // sums into one scalar.
@@ -2256,7 +2309,8 @@ struct NDRangeReduction<
         range<1> GlobalRange = {HasUniformWG ? NWorkItems
                                              : NWorkGroups * WGSize};
         nd_range<1> Range{GlobalRange, range<1>(WGSize)};
-        AuxHandler.parallel_for<Name>(Range, Krn);
+        AuxHandler.parallel_for<reduction_entry_point_t<KernelName, Name>>(
+            Range, Krn);
         NWorkItems = NWorkGroups;
       });
     } // end while (NWorkItems > 1)
@@ -2449,8 +2503,10 @@ template <> struct NDRangeReduction<reduction::strategy::basic> {
                                       KernelType, Strategy, Reduction,
                                       KernelMultipleWGTag, OutTypeMultipleWG>;
 
-      auto KernelIdOneWG = get_kernel_id<NameOneWG>();
-      auto KernelIdMultipleWG = get_kernel_id<NameMultipleWG>();
+      auto KernelIdOneWG =
+          get_kernel_id<reduction_entry_point_t<KernelName, NameOneWG>>();
+      auto KernelIdMultipleWG =
+          get_kernel_id<reduction_entry_point_t<KernelName, NameMultipleWG>>();
       Map.emplace(KernelIdOneWG,
                   std::make_pair(/*IsAuxKernel*/ false, KernelOneWGTag{}));
       Map.emplace(KernelIdMultipleWG,
@@ -2478,8 +2534,10 @@ template <> struct NDRangeReduction<reduction::strategy::basic> {
           reduction::AuxKrn, KernelName, Dims, KernelType, Strategy, Reduction,
           KernelMultipleWGTag, OutTypeMultipleWG, InType>;
 
-      auto KernelIdOneWG = get_kernel_id<NameOneWG>();
-      auto KernelIdMultipleWG = get_kernel_id<NameMultipleWG>();
+      auto KernelIdOneWG =
+          get_kernel_id<reduction_entry_point_t<KernelName, NameOneWG>>();
+      auto KernelIdMultipleWG =
+          get_kernel_id<reduction_entry_point_t<KernelName, NameMultipleWG>>();
       Map.emplace(KernelIdOneWG,
                   std::make_pair(/*IsAuxKernel*/ true, KernelOneWGTag{}));
       Map.emplace(KernelIdMultipleWG,
@@ -2551,7 +2609,8 @@ template <> struct NDRangeReduction<reduction::strategy::basic> {
                                       KernelTagType, decltype(Out)>;
       Name Krn(Out, IdentityContainer, BOp, LocalReds, IsUpdateOfUserVar,
                KernelFunc);
-      CGH.parallel_for<Name>(NDRange, Properties, Krn);
+      CGH.parallel_for<reduction_entry_point_t<KernelName, Name>>(
+          NDRange, Properties, Krn);
     };
 
     if (NWorkGroups == 1)
@@ -2620,7 +2679,8 @@ template <> struct NDRangeReduction<reduction::strategy::basic> {
           range<1> GlobalRange = {UniformPow2WG ? NWorkItems
                                                 : NWorkGroups * WGSize};
           nd_range<1> Range{GlobalRange, range<1>(WGSize)};
-          AuxHandler.parallel_for<Name>(Range, Krn);
+          AuxHandler.parallel_for<reduction_entry_point_t<KernelName, Name>>(
+              Range, Krn);
           NWorkItems = NWorkGroups;
         });
       };
@@ -3004,7 +3064,8 @@ void reduCGFuncMulti(handler &CGH, KernelType KernelFunc,
         decltype(InitToIdentityProps), decltype(KernelTag)>;
     Name Krn(OutAccsTuple, LocalAccsTuple, IdentitiesTuple, BOPsTuple, ScalarIs,
              ArrayIs, InitToIdentityProps, KernelFunc);
-    CGH.parallel_for<Name>(Range, Properties, Krn);
+    CGH.parallel_for<reduction_entry_point_t<KernelName, Name>>(
+        Range, Properties, Krn);
   };
 
   size_t NWorkGroups = Range.get_group_range().size();
@@ -3279,8 +3340,10 @@ template <> struct NDRangeReduction<reduction::strategy::multi> {
         LocalAccsTupleT, IdentitiesTupleT, BOPsTupleT, ScalarIsT, ArrayIsT,
         InitToIdentityPropsT, KernelMultipleWGTag>;
 
-    auto KernelIdOneWG = get_kernel_id<NameOneWG>();
-    auto KernelIdMultipleWG = get_kernel_id<NameMultipleWG>();
+    auto KernelIdOneWG =
+        get_kernel_id<reduction_entry_point_t<KernelName, NameOneWG>>();
+    auto KernelIdMultipleWG =
+        get_kernel_id<reduction_entry_point_t<KernelName, NameMultipleWG>>();
 
     // TODO: These is only for the Main kernel; Add Aux if needed in future.
     std::unordered_map<kernel_id, __sycl_reduction_kernel_info> Map{
