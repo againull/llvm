@@ -9286,7 +9286,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       CmdArgs.push_back("--cuda-emit-nvcc-abi");
   }
 
-  if (IsCuda || IsHIP) {
+  if (IsCuda || IsHIP || IsSYCL) {
     // Determine the original source input.
     const Action *SourceAction = &JA;
     while (SourceAction->getKind() != Action::InputClass) {
@@ -9296,7 +9296,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     auto CUID = cast<InputAction>(SourceAction)->getId();
     if (!CUID.empty())
       CmdArgs.push_back(Args.MakeArgString(Twine("-cuid=") + Twine(CUID)));
+  }
 
+  if (IsCuda || IsHIP) {
     // -ffast-math turns on -fgpu-approx-transcendentals implicitly, but will
     // be overriden by -fno-gpu-approx-transcendentals.
     bool UseApproxTranscendentals = Args.hasFlag(
@@ -11290,7 +11292,7 @@ void OffloadDeps::ConstructJobMultipleOutputs(Compilation &C,
 // SPIR-V backend. This set of arguments is expected to get updated as we add
 // more features/extensions to the SPIR-V backend.
 static void getSPIRVBackendOpts(const llvm::opt::ArgList &TCArgs,
-                                ArgStringList &BackendArgs) {
+                                StringRef Arch, ArgStringList &BackendArgs) {
   BackendArgs.push_back(TCArgs.MakeArgString("-filetype=obj"));
   BackendArgs.push_back(
       TCArgs.MakeArgString("-mtriple=spirv64v1.6-unknown-unknown"));
@@ -11325,6 +11327,8 @@ static void getSPIRVBackendOpts(const llvm::opt::ArgList &TCArgs,
                             ",+SPV_INTEL_inline_assembly"
                             ",+SPV_INTEL_joint_matrix"
                             ",+SPV_INTEL_long_composites"
+                            ",+SPV_INTEL_split_barrier"
+                            ",+SPV_INTEL_subgroup_matrix_multiply_accumulate"
                             ",+SPV_INTEL_subgroups"
                             ",+SPV_INTEL_tensor_float32_conversion"
                             ",+SPV_INTEL_variable_length_array"
@@ -11339,6 +11343,8 @@ static void getSPIRVBackendOpts(const llvm::opt::ArgList &TCArgs,
                           ",+SPV_KHR_shader_clock"
                           ",+SPV_KHR_uniform_group_instructions";
   ExtArg = ExtArg + DefaultExtArg + IntelExtArg + KHRExtArg;
+  if (llvm::offloading::supportsBFloat16(Arch))
+    ExtArg += ",+SPV_KHR_bfloat16,+SPV_INTEL_16bit_atomics";
   BackendArgs.push_back(TCArgs.MakeArgString(ExtArg));
 
   // TODO:
@@ -11374,7 +11380,7 @@ static void getNonTripleBasedSPIRVTransOpts(Compilation &C,
 // from sycl-jit/jit-compiler/lib/translation/SPIRVLLVMTranslation.cpp.
 static void getTripleBasedSPIRVTransOpts(Compilation &C,
                                          const llvm::opt::ArgList &TCArgs,
-                                         llvm::Triple Triple,
+                                         llvm::Triple Triple, StringRef Arch,
                                          ArgStringList &TranslatorArgs) {
   bool IsCPU = Triple.isSPIR() &&
                Triple.getSubArch() == llvm::Triple::SPIRSubArch_x86_64;
@@ -11403,6 +11409,9 @@ static void getTripleBasedSPIRVTransOpts(Compilation &C,
       ",+SPV_INTEL_cache_controls"
       ",+SPV_KHR_shader_clock"
       ",+SPV_INTEL_bindless_images"
+      ",+SPV_INTEL_split_barrier"
+      ",+SPV_INTEL_2d_block_io"
+      ",+SPV_INTEL_subgroup_matrix_multiply_accumulate"
       ",+SPV_INTEL_bfloat16_conversion"
       ",+SPV_INTEL_joint_matrix"
       ",+SPV_KHR_uniform_group_instructions"
@@ -11415,6 +11424,9 @@ static void getTripleBasedSPIRVTransOpts(Compilation &C,
       ",+SPV_INTEL_fp_max_error"
       ",+SPV_INTEL_memory_access_aliasing"
       ",+SPV_INTEL_maximum_registers";
+
+  if (llvm::offloading::supportsBFloat16(Arch))
+    ExtArg += ",+SPV_KHR_bfloat16,+SPV_INTEL_16bit_atomics";
 
   TranslatorArgs.push_back(TCArgs.MakeArgString(ExtArg));
 }
@@ -11441,12 +11453,18 @@ void SPIRVTranslator::ConstructJob(Compilation &C, const JobAction &JA,
   if (JA.isDeviceOffloading(Action::OFK_SYCL)) {
     const toolchains::SYCLToolChain &TC =
         static_cast<const toolchains::SYCLToolChain &>(getToolChain());
+    llvm::Triple Triple = TC.getTriple();
+    StringRef Arch = JA.getOffloadingArch().ArchName;
+    ArgStringList BackendArgs;
+    if (Arch.empty() && Triple.getSubArch() == llvm::Triple::SPIRSubArch_gen) {
+      TC.TranslateBackendTargetArgs(Triple, TCArgs, BackendArgs);
+      Arch = tools::SYCL::gen::getEmbeddedDeviceArch(BackendArgs);
+    }
     if (UseSPIRVBackend) {
-      getSPIRVBackendOpts(TCArgs, TranslatorArgs);
+      getSPIRVBackendOpts(TCArgs, Arch, TranslatorArgs);
     } else {
       getNonTripleBasedSPIRVTransOpts(C, TCArgs, TranslatorArgs);
-      llvm::Triple Triple = TC.getTriple();
-      getTripleBasedSPIRVTransOpts(C, TCArgs, Triple, TranslatorArgs);
+      getTripleBasedSPIRVTransOpts(C, TCArgs, Triple, Arch, TranslatorArgs);
       // Handle -Xspirv-translator
       TC.TranslateTargetOpt(
           Triple, TCArgs, TranslatorArgs, options::OPT_Xspirv_translator,

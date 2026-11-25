@@ -420,7 +420,7 @@ EventImplPtr queue_impl::submit_kernel_scheduler_bypass(
 
   auto EnqueueKernel = [&]() {
 #ifdef XPTI_ENABLE_INSTRUMENTATION
-    xpti_td *CmdTraceEvent = nullptr;
+    XPTIEventPtr CmdTraceEvent;
     uint64_t InstanceID = 0;
     uint8_t StreamID = 0;
     // Only enable instrumentation if there are subscribes to the SYCL
@@ -432,7 +432,8 @@ EventImplPtr queue_impl::submit_kernel_scheduler_bypass(
           StreamID, KernelImplPtr, CodeLoc, IsTopCodeLoc,
           *KData.getDeviceKernelInfoPtr(), this, KData.getNDRDesc(),
           KernelBundleImpPtr, KData.getArgs());
-      detail::emitInstrumentationGeneral(StreamID, InstanceID, CmdTraceEvent,
+      detail::emitInstrumentationGeneral(StreamID, InstanceID,
+                                         CmdTraceEvent.get(),
                                          xpti::trace_task_begin, nullptr);
     }
 #endif
@@ -453,10 +454,11 @@ EventImplPtr queue_impl::submit_kernel_scheduler_bypass(
       // Emit signal only when event is created
       if (!DiscardEvent) {
         detail::emitInstrumentationGeneral(
-            StreamID, InstanceID, CmdTraceEvent, xpti::trace_signal,
+            StreamID, InstanceID, CmdTraceEvent.get(), xpti::trace_signal,
             static_cast<const void *>(ResultEvent->getHandle()));
       }
-      detail::emitInstrumentationGeneral(StreamID, InstanceID, CmdTraceEvent,
+      detail::emitInstrumentationGeneral(StreamID, InstanceID,
+                                         CmdTraceEvent.get(),
                                          xpti::trace_task_end, nullptr);
     }
 #endif
@@ -485,12 +487,22 @@ EventImplPtr queue_impl::submit_kernel_scheduler_bypass(
 }
 
 EventImplPtr queue_impl::submit_barrier_scheduler_bypass(
-    std::vector<detail::EventImplPtr> &DepEvents, detail::CGType BarrierType,
+    std::vector<detail::EventImplPtr> &&DepEvents, detail::CGType BarrierType,
     bool EventNeeded, const EventImplPtr &EventForReuse) {
 
   // EventForReuse can only be set for BarrierType equal to CGType::Barrier
   // (enqueue_signal_event function)
   assert(!EventForReuse || (EventForReuse && BarrierType == CGType::Barrier));
+
+  if (EventForReuse) {
+    // enqueue_signal_event has checked that the previous command of the event
+    // is not held by the scheduler, so the lists are no longer its inputs.
+    assert((!EventForReuse->getCommand() || EventForReuse->isEnqueued()) &&
+           "event of a command held by the scheduler enqueued for signaling");
+    // The event moves on to a new command: its wait list is the new
+    // command's from now on.
+    EventForReuse->cleanupDependencyEvents();
+  }
 
   ur_event_handle_t UREvent =
       EventForReuse ? EventForReuse->getHandleReusable(*this) : nullptr;
@@ -575,8 +587,9 @@ EventImplPtr queue_impl::submit_barrier_direct_impl(
                                CGData.MEvents, getContextImpl());
 
     if (SchedulerBypass) {
-      return {submit_barrier_scheduler_bypass(CGData.MEvents, BarrierType,
-                                              CallerNeedsEvent, EventForReuse),
+      return {submit_barrier_scheduler_bypass(std::move(CGData.MEvents),
+                                              BarrierType, CallerNeedsEvent,
+                                              EventForReuse),
               /*SchedulerBypass*/ true};
     }
 
@@ -645,7 +658,7 @@ queue_impl::makeEnqueuedEvent(ur_event_handle_t UREvent,
 }
 
 EventImplPtr queue_impl::submit_async_alloc_scheduler_bypass(
-    ur_event_handle_t UREvent, std::vector<detail::EventImplPtr> &DepEvents,
+    ur_event_handle_t UREvent, std::vector<detail::EventImplPtr> &&DepEvents,
     bool EventNeeded) {
   // The allocation itself, together with its dependencies, has already been
   // enqueued to the backend by the caller, because the pointer has to be
@@ -659,7 +672,8 @@ EventImplPtr queue_impl::submit_async_alloc_scheduler_bypass(
 }
 
 EventImplPtr queue_impl::submit_async_free_scheduler_bypass(
-    void *Ptr, std::vector<detail::EventImplPtr> &DepEvents, bool EventNeeded) {
+    void *Ptr, std::vector<detail::EventImplPtr> &&DepEvents,
+    bool EventNeeded) {
   std::vector<ur_event_handle_t> RawEvents;
   if (DepEvents.size() > 0)
     RawEvents = detail::Command::getUrEvents(DepEvents, this, false);
@@ -714,7 +728,8 @@ queue_impl::submit_async_malloc_direct(ur_usm_pool_handle_t Pool, size_t Size,
               /*SchedulerBypass*/ false};
     }
 
-    return {submit_async_alloc_scheduler_bypass(UREvent, CGData.MEvents,
+    return {submit_async_alloc_scheduler_bypass(UREvent,
+                                                std::move(CGData.MEvents),
                                                 /*EventNeeded*/ false),
             /*SchedulerBypass*/ true};
   };
@@ -739,7 +754,7 @@ void queue_impl::submit_async_free_direct(
               /*SchedulerBypass*/ false};
     }
 
-    return {submit_async_free_scheduler_bypass(Ptr, CGData.MEvents,
+    return {submit_async_free_scheduler_bypass(Ptr, std::move(CGData.MEvents),
                                                /*EventNeeded*/ false),
             /*SchedulerBypass*/ true};
   };

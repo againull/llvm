@@ -3621,41 +3621,61 @@ void reduction_parallel_for(handler &CGH, range<Dims> Range,
     return nd_range<NDRDims>{range<NDRDims>{NDRItems}, range<NDRDims>{WGSize}};
   };
 
-  // Iterate through the index space by assigning contiguous chunks to each
-  // work-group, then iterating through each chunk using a stride equal to the
-  // work-group's local range, which gives much better performance than using
-  // stride equal to 1. For each of the index the given the original KernelFunc
-  // is called and the reduction value hold in \p Reducer is accumulated in
-  // those calls.
-  auto UpdatedKernelFunc = [=](auto NDId, auto &...Reducers) {
-    // Divide into contiguous chunks and assign each chunk to a Group
-    // Rely on precomputed division to avoid repeating expensive operations
-    // TODO: Some devices may prefer alternative remainder handling
-    auto Group = NDId.get_group();
-    size_t GroupId = Group.get_group_linear_id();
-    size_t NumGroups = Group.get_group_linear_range();
-    size_t PerGroup = Range.size() / NumGroups;
-    bool LastGroup = (GroupId == NumGroups - 1);
-    size_t GroupStart = GroupId * PerGroup;
-    size_t GroupEnd = LastGroup ? Range.size() : (GroupStart + PerGroup);
-
-    // Loop over the contiguous chunk
-    size_t Start = GroupStart + NDId.get_local_id(0);
-    size_t End = GroupEnd;
-    size_t Stride = NDId.get_local_range(0);
-    auto GetDelinearized = [&](size_t I) {
-      auto Id = getDelinearizedId(Range, I);
-      if constexpr (std::is_invocable_v<decltype(KernelFunc), id<Dims>,
-                                        decltype(Reducers)...>)
-        return Id;
-      else
-        // SYCL doesn't provide parallel_for accepting offset in presence of
-        // reductions, so use with_offset==false.
-        return reduction::getDelinearizedItem(Range, Id);
+  auto Dev = getDeviceFromHandler(CGH);
+  const bool CanInterleave =
+      Dev.is_gpu() && Dev.get_info<info::device::vendor_id>() == 0x8086;
+  // Use the same kernel type for the query and launch, but capture the final
+  // geometry only after the query has clamped the work-group size.
+  auto MakeUpdatedKernelFunc = [&] {
+    const size_t NumGroups = NWorkGroups;
+    const size_t PerGroup = NWorkItems / NumGroups;
+    // Keep small ranges contiguous so every work-group has work to do.
+    constexpr size_t ItemsPerWorkItem = 8;
+    const size_t BlockSize = WGSize * ItemsPerWorkItem;
+    const bool Interleave = CanInterleave && PerGroup >= BlockSize;
+    const size_t FullBlocks = NWorkItems / BlockSize;
+    return [=](auto NDId, auto &...Reducers) {
+      auto Group = NDId.get_group();
+      size_t GroupId = Group.get_group_linear_id();
+      size_t Stride = NDId.get_local_range(0);
+      auto GetDelinearized = [&](size_t I) {
+        auto Id = getDelinearizedId(Range, I);
+        if constexpr (std::is_invocable_v<decltype(KernelFunc), id<Dims>,
+                                          decltype(Reducers)...>)
+          return Id;
+        else
+          // SYCL doesn't provide parallel_for accepting offset in presence of
+          // reductions, so use with_offset==false.
+          return reduction::getDelinearizedItem(Range, Id);
+      };
+      // Keep one call site for diagnostics on invalid kernel functors.
+      auto RunKernel = [&](size_t I) {
+        KernelFunc(GetDelinearized(I), Reducers...);
+      };
+      if (Interleave) {
+        for (size_t Block = GroupId; Block < FullBlocks; Block += NumGroups) {
+          size_t Base = Block * BlockSize + NDId.get_local_id(0);
+          for (size_t J = 0; J < ItemsPerWorkItem; ++J)
+            RunKernel(Base + J * Stride);
+        }
+        if (FullBlocks % NumGroups == GroupId) {
+          size_t Base = FullBlocks * BlockSize;
+          size_t Count = NWorkItems - Base;
+          for (size_t Offset = NDId.get_local_id(0); Offset < Count;
+               Offset += Stride)
+            RunKernel(Base + Offset);
+        }
+      } else {
+        bool LastGroup = (GroupId == NumGroups - 1);
+        size_t GroupStart = GroupId * PerGroup;
+        size_t GroupEnd = LastGroup ? Range.size() : (GroupStart + PerGroup);
+        size_t Start = GroupStart + NDId.get_local_id(0);
+        for (size_t I = Start; I < GroupEnd; I += Stride)
+          RunKernel(I);
+      }
     };
-    for (size_t I = Start; I < End; I += Stride)
-      KernelFunc(GetDelinearized(I), Reducers...);
   };
+  auto UpdatedKernelFunc = MakeUpdatedKernelFunc();
 
   __sycl_reduction_kernel_tag_type KernelTag = std::nullopt;
   // We query max WGSize for the Main kernel. The individual kernel strategies'
@@ -3703,8 +3723,8 @@ void reduction_parallel_for(handler &CGH, range<Dims> Range,
     const size_t MaxWGSize = KernelWGSize.value_or(PrefWGSize);
     nd_range<NDRDims> NDRange = CalculateNDRange(MaxWGSize);
 
-    reduction_parallel_for<KernelName, StrategyToUse>(CGH, NDRange, Properties,
-                                                      Redu, UpdatedKernelFunc);
+    reduction_parallel_for<KernelName, StrategyToUse>(
+        CGH, NDRange, Properties, Redu, MakeUpdatedKernelFunc());
   } else {
     bool HasNumWorkGroupsTag = [&]() {
       if constexpr (Strategy != reduction::strategy::auto_select)
@@ -3738,7 +3758,7 @@ void reduction_parallel_for(handler &CGH, range<Dims> Range,
     return std::apply(
         [&](auto &...Reds) {
           return reduction_parallel_for<KernelName, Strategy>(
-              CGH, NDRange, Properties, Reds..., UpdatedKernelFunc);
+              CGH, NDRange, Properties, Reds..., MakeUpdatedKernelFunc());
         },
         ReduTuple);
   }
@@ -3754,12 +3774,15 @@ struct reduction; // tag type, never defined
 } // namespace tag
 
 namespace key {
-struct initialize_to_identity : detail::runtime_property_key {};
+struct initialize_to_identity
+    : detail::runtime_property_key<initialize_to_identity> {};
 } // namespace key
 
 struct initialize_to_identity
-    : detail::runtime_property<key::initialize_to_identity> {
-  constexpr initialize_to_identity(bool v = true) : value{v} {}
+    : detail::runtime_property<initialize_to_identity,
+                               key::initialize_to_identity> {
+  constexpr initialize_to_identity() : value{true} {}
+  constexpr explicit initialize_to_identity(bool v) : value{v} {}
   bool value;
 };
 } // namespace property
@@ -3789,8 +3812,8 @@ inline property_list khrReductionToPropertyList(const PropertyOrList &Props) {
 
 template <typename PropertyOrList>
 inline constexpr bool KhrPropsForReduction =
-    khr::is_property_for_v<PropertyOrList, khr::property::tag::reduction> ||
-    khr::is_property_list_for_v<PropertyOrList, khr::property::tag::reduction>;
+    khr::is_property_or_list_for_v<PropertyOrList,
+                                   khr::property::tag::reduction>;
 } // namespace detail
 #endif // __DPCPP_ENABLE_UNFINISHED_KHR_EXTENSIONS
 
@@ -3886,36 +3909,14 @@ auto reduction(span<T, Extent> Span, const T &Identity,
 // overload above, accepting a khr property or property list translated to an
 // old-style property_list.
 template <
-    typename T, typename AllocatorT, typename BinaryOperation,
-    typename PropertyOrList = khr::empty_properties_t,
-    typename = std::enable_if_t<detail::KhrPropsForReduction<PropertyOrList>>>
-auto reduction(buffer<T, 1, AllocatorT> Var, handler &CGH,
-               BinaryOperation Combiner, PropertyOrList props) {
-  return reduction(Var, CGH, Combiner,
-                   detail::khrReductionToPropertyList(props));
-}
-
-template <
-    typename T, typename BinaryOperation,
-    typename PropertyOrList = khr::empty_properties_t,
+    typename T, typename BinaryOperation, typename PropertyOrList,
     typename = std::enable_if_t<detail::KhrPropsForReduction<PropertyOrList>>>
 auto reduction(T *Var, BinaryOperation Combiner, PropertyOrList props) {
   return reduction(Var, Combiner, detail::khrReductionToPropertyList(props));
 }
 
 template <
-    typename T, typename AllocatorT, typename BinaryOperation,
-    typename PropertyOrList = khr::empty_properties_t,
-    typename = std::enable_if_t<detail::KhrPropsForReduction<PropertyOrList>>>
-auto reduction(buffer<T, 1, AllocatorT> Var, handler &CGH, const T &Identity,
-               BinaryOperation Combiner, PropertyOrList props) {
-  return reduction(Var, CGH, Identity, Combiner,
-                   detail::khrReductionToPropertyList(props));
-}
-
-template <
-    typename T, typename BinaryOperation,
-    typename PropertyOrList = khr::empty_properties_t,
+    typename T, typename BinaryOperation, typename PropertyOrList,
     typename = std::enable_if_t<detail::KhrPropsForReduction<PropertyOrList>>>
 auto reduction(T *Var, const T &Identity, BinaryOperation Combiner,
                PropertyOrList props) {
@@ -3926,7 +3927,7 @@ auto reduction(T *Var, const T &Identity, BinaryOperation Combiner,
 template <
     typename T, size_t Extent, typename BinaryOperation,
     typename = std::enable_if_t<Extent != dynamic_extent>,
-    typename PropertyOrList = khr::empty_properties_t,
+    typename PropertyOrList,
     typename = std::enable_if_t<detail::KhrPropsForReduction<PropertyOrList>>>
 auto reduction(span<T, Extent> Span, BinaryOperation Combiner,
                PropertyOrList props) {
@@ -3936,7 +3937,7 @@ auto reduction(span<T, Extent> Span, BinaryOperation Combiner,
 template <
     typename T, size_t Extent, typename BinaryOperation,
     typename = std::enable_if_t<Extent != dynamic_extent>,
-    typename PropertyOrList = khr::empty_properties_t,
+    typename PropertyOrList,
     typename = std::enable_if_t<detail::KhrPropsForReduction<PropertyOrList>>>
 auto reduction(span<T, Extent> Span, const T &Identity,
                BinaryOperation Combiner, PropertyOrList props) {
