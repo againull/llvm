@@ -3607,15 +3607,24 @@ void reduction_parallel_for(handler &CGH, range<Dims> Range,
   // Here we linearize the range<Dims> into nd_range<1>; hence Dims is 1.
   constexpr size_t NDRDims{nd_range<1>::dimensions};
 
-  // Helper to calculate the actual nd_range with safety check on the maximum
-  // work-group size that will be queried from the kernel info via
-  // kernel_bundle. If needed, the above-computed WGSize and NWorkGroups will be
-  // updated.
-  auto CalculateNDRange = [&](const size_t MaxWGSize) -> nd_range<NDRDims> {
-    // Update work-group size and number of work-groups if required.
-    if (MaxWGSize != 0 && WGSize > MaxWGSize) {
-      WGSize = MaxWGSize;
-      NWorkGroups = ComputeNumWorkGroups(WGSize);
+  auto CalculateNDRange = [&](bool HasNumWorkGroupsTag,
+                              auto QueryKernelWGSize) -> nd_range<NDRDims> {
+    auto ClampToKernelLimit = [&](__sycl_reduction_kernel_tag_type Tag) {
+      const size_t MaxWGSize = QueryKernelWGSize(Tag).value_or(PrefWGSize);
+      if (MaxWGSize != 0 && WGSize > MaxWGSize) {
+        WGSize = MaxWGSize;
+        NWorkGroups = ComputeNumWorkGroups(WGSize);
+      }
+    };
+    if (!HasNumWorkGroupsTag) {
+      ClampToKernelLimit(std::nullopt);
+    } else {
+      if (NWorkGroups == 1)
+        ClampToKernelLimit(KernelOneWGTag{});
+      // A smaller work-group can turn a one-group launch into a multi-group
+      // launch. The multi-group kernel has its own limit.
+      if (NWorkGroups > 1)
+        ClampToKernelLimit(KernelMultipleWGTag{});
     }
     const size_t NDRItems = NWorkGroups * WGSize;
     return nd_range<NDRDims>{range<NDRDims>{NDRItems}, range<NDRDims>{WGSize}};
@@ -3677,7 +3686,6 @@ void reduction_parallel_for(handler &CGH, range<Dims> Range,
   };
   auto UpdatedKernelFunc = MakeUpdatedKernelFunc();
 
-  __sycl_reduction_kernel_tag_type KernelTag = std::nullopt;
   // We query max WGSize for the Main kernel. The individual kernel strategies'
   // implementations can decide whether to use MainKrn max or query AuxKrn max.
   constexpr bool QueryForAuxKernel = false;
@@ -3709,19 +3717,14 @@ void reduction_parallel_for(handler &CGH, range<Dims> Range,
         return reduction::strategy::range_basic;
     }();
 
-    if constexpr (NDRangeReduction<StrategyToUse>::has_num_work_groups_tag()) {
-      if (NWorkGroups == 1)
-        KernelTag = KernelOneWGTag{};
-      else
-        KernelTag = KernelMultipleWGTag{};
-    }
-
-    auto KernelWGSize =
-        reduction_kernel_get_info<info::kernel_device_specific::work_group_size,
-                                  KernelName, NDRDims, StrategyToUse>(
-            CGH, QueryForAuxKernel, KernelTag, Redu, UpdatedKernelFunc);
-    const size_t MaxWGSize = KernelWGSize.value_or(PrefWGSize);
-    nd_range<NDRDims> NDRange = CalculateNDRange(MaxWGSize);
+    auto NDRange = CalculateNDRange(
+        NDRangeReduction<StrategyToUse>::has_num_work_groups_tag(),
+        [&](auto Tag) {
+          return reduction_kernel_get_info<
+              info::kernel_device_specific::work_group_size, KernelName,
+              NDRDims, StrategyToUse>(CGH, QueryForAuxKernel, Tag, Redu,
+                                     UpdatedKernelFunc);
+        });
 
     reduction_parallel_for<KernelName, StrategyToUse>(
         CGH, NDRange, Properties, Redu, MakeUpdatedKernelFunc());
@@ -3737,23 +3740,16 @@ void reduction_parallel_for(handler &CGH, range<Dims> Range,
             },
             ReduTuple);
     }();
-    if (HasNumWorkGroupsTag) {
-      if (NWorkGroups == 1)
-        KernelTag = KernelOneWGTag{};
-      else
-        KernelTag = KernelMultipleWGTag{};
-    }
-
-    auto KernelWGSize = std::apply(
-        [&](auto &...Reds) {
-          return reduction_kernel_get_info<
-              info::kernel_device_specific::work_group_size, KernelName,
-              NDRDims, Strategy>(CGH, QueryForAuxKernel, KernelTag, Reds...,
-                                 UpdatedKernelFunc);
-        },
-        ReduTuple);
-    const size_t MaxWGSize = KernelWGSize.value_or(PrefWGSize);
-    nd_range<NDRDims> NDRange = CalculateNDRange(MaxWGSize);
+    auto NDRange = CalculateNDRange(HasNumWorkGroupsTag, [&](auto Tag) {
+      return std::apply(
+          [&](auto &...Reds) {
+            return reduction_kernel_get_info<
+                info::kernel_device_specific::work_group_size, KernelName,
+                NDRDims, Strategy>(CGH, QueryForAuxKernel, Tag, Reds...,
+                                   UpdatedKernelFunc);
+          },
+          ReduTuple);
+    });
 
     return std::apply(
         [&](auto &...Reds) {
